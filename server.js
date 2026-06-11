@@ -7,7 +7,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const archiver = require('archiver');
 
 const app = express();
@@ -94,14 +94,19 @@ function buildHeader(meta, logType) {
   return [line, '  EXPERIMENT LOG', line, body, line, '', ''].join('\r\n');
 }
 
-/** 用系統檔案管理員開啟指定路徑 */
+/**
+ * 用系統檔案管理員開啟指定路徑。
+ * 使用 execFile + 參數陣列（不經過 shell），避免路徑被當成命令注入。
+ */
 function openInExplorer(targetPath) {
+  // explorer.exe 開啟成功時也可能回傳非 0 exit code，這裡忽略錯誤即可。
+  const ignore = () => {};
   if (process.platform === 'win32') {
-    exec(`explorer "${targetPath}"`);
+    execFile('explorer.exe', [targetPath], ignore);
   } else if (process.platform === 'darwin') {
-    exec(`open "${targetPath}"`);
+    execFile('open', [targetPath], ignore);
   } else {
-    exec(`xdg-open "${targetPath}"`);
+    execFile('xdg-open', [targetPath], ignore);
   }
 }
 
