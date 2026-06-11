@@ -62,3 +62,7 @@ npm run build
 產生 `dist/M2-LOG-Tool.exe`。雙播即可啟動（不需安裝 Node.js），然後開啟瀏覽器：<http://127.0.0.1:3000>。
 
 > 打包後的預設輸出目錄是 **EXE 同層**的 `LOG_OUTPUT/`（非唯讀的打包內部）。建議把 EXE 放在可寫入的資料夾（避免 `C:\Program Files` 這類需管理員權限的位置）。
+
+## 給使用者啟動
+
+雙擊 `start-exe.bat` 即可啟動 EXE 並自動開啟瀏覽器。發佈時把 `start-exe.bat` 與 `M2-LOG-Tool.exe` 放在同一資料夾即可（批次檔會自動找同層的 EXE）。
