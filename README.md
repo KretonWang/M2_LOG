@@ -45,3 +45,20 @@ LOG_OUTPUT/
 - 預設輸出到專案內 `LOG_OUTPUT/`。可在「輸出根目錄」欄位填絕對路徑（例如 `D:\Logs`）。
 - 連接埠：環境變數 `PORT`（預設 `3000`）。
 - 伺服器只綁定 `127.0.0.1`，不對外網路開放。
+
+## 打包成 EXE
+
+使用 [`@yao-pkg/pkg`](https://github.com/yao-pkg/pkg)（支援 Node 22）將整個工具打包成單一執行檔。
+
+**最簡單**：直接雙擊 `build-exe.bat`（會自動安裝相依套件並打包）。
+
+或手動執行：
+
+```powershell
+npm install
+npm run build
+```
+
+產生 `dist/M2-LOG-Tool.exe`。雙播即可啟動（不需安裝 Node.js），然後開啟瀏覽器：<http://127.0.0.1:3000>。
+
+> 打包後的預設輸出目錄是 **EXE 同層**的 `LOG_OUTPUT/`（非唯讀的打包內部）。建議把 EXE 放在可寫入的資料夾（避免 `C:\Program Files` 這類需管理員權限的位置）。

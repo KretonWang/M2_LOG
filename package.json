@@ -3,9 +3,20 @@
   "version": "1.0.0",
   "description": "實驗 LOG 收集與輸出工具 (UEFI / SAM) - LOG collector with auto folder export",
   "main": "server.js",
+  "bin": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build": "pkg . --targets node22-win-x64 --output dist/M2-LOG-Tool.exe"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ],
+    "targets": [
+      "node22-win-x64"
+    ],
+    "outputPath": "dist"
   },
   "keywords": [
     "log",
@@ -17,5 +28,8 @@
   "dependencies": {
     "archiver": "7.0.1",
     "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.20.0"
   }
 }

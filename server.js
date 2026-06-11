@@ -14,10 +14,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = '127.0.0.1';
 
-// 預設輸出根目錄（專案底下的 LOG_OUTPUT/）
-const DEFAULT_OUTPUT_DIR = path.join(__dirname, 'LOG_OUTPUT');
+// 是否為 pkg 打包後的 EXE。打包後 __dirname 會指向唯讀的 snapshot 虛擬檔案系統，
+// 不能拿來當輸出目錄，必須改用 EXE 實際所在的資料夾。
+const isPackaged = typeof process.pkg !== 'undefined';
+const appDir = isPackaged ? path.dirname(process.execPath) : __dirname;
+
+// 預設輸出根目錄（開發模式：專案底下；EXE：執行檔同層的 LOG_OUTPUT/）
+const DEFAULT_OUTPUT_DIR = path.join(appDir, 'LOG_OUTPUT');
 
 app.use(express.json({ limit: '50mb' }));
+// 靜態檔案仍從 __dirname/public 讀取——pkg 會把 public/ 以 assets 形式打包進 snapshot。
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 記錄最後一次輸出的資料夾，讓「開啟檔案總管」可直接定位
