@@ -21,6 +21,12 @@
       "src/**/*",
       "package.json"
     ],
+    "extraFiles": [
+      {
+        "from": "highlight",
+        "to": "highlight"
+      }
+    ],
     "win": {
       "target": "nsis"
     },

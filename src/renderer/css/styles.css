@@ -666,17 +666,231 @@ input[type="date"] {
 
 .ana-view {
   padding: 0;
+  position: relative;
+  overflow: hidden;
 }
 
-.ana-pre {
-  margin: 0;
-  padding: 16px 18px;
+.ana-scroll {
+  height: 100%;
+  overflow: auto;
+  padding-right: 24px;
+}
+
+.ana-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.ana-ruler {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 22px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.16);
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  z-index: 4;
+}
+
+.ana-ruler[hidden] {
+  display: none;
+}
+
+.ana-ruler-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ana-ruler-tick {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 4px;
+  border-radius: 2px;
+  opacity: 0.9;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.ana-ruler-tick:hover {
+  height: 6px;
+  opacity: 1;
+}
+
+.ana-ruler-tick.err {
+  background: #ff6b81;
+}
+
+.ana-ruler-tick.warn {
+  background: #fbbf24;
+}
+
+.ana-ruler-view {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 18px;
+  background: rgba(130, 150, 210, 0.22);
+  border: 1px solid rgba(165, 185, 240, 0.5);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.ana-ruler:hover .ana-ruler-view {
+  background: rgba(130, 150, 210, 0.32);
+}
+
+body.ana-ruler-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.ana-code {
   font-family: "Cascadia Code", "Consolas", "SF Mono", monospace;
   font-size: 12.5px;
-  line-height: 1.6;
+  line-height: 1.55;
   color: #d6dce8;
+  padding: 8px 0;
+}
+
+.ana-line {
+  display: flex;
+  align-items: flex-start;
+}
+
+.ana-line:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ana-line.lvl-error {
+  background: rgba(244, 63, 94, 0.12);
+}
+
+.ana-line.lvl-warn {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.ana-line.flash {
+  animation: anaFlash 1.15s ease-out;
+}
+
+@keyframes anaFlash {
+  0% {
+    background: rgba(99, 102, 241, 0.5);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.ana-ln {
+  flex: 0 0 auto;
+  min-width: 52px;
+  padding: 0 12px 0 16px;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ana-lc {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 16px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.hl-error {
+  color: #ff6b81;
+  font-weight: 700;
+}
+
+.hl-warn {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.hl-info {
+  color: var(--accent-2);
+}
+
+/* ---------- Analysis viewer nav toolbar ---------- */
+.ana-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ana-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.5;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.ana-chip:hover {
+  opacity: 0.8;
+}
+
+.ana-chip.err {
+  color: #ff6b81;
+}
+
+.ana-chip.warn {
+  color: #fbbf24;
+}
+
+.ana-chip.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: currentColor;
+}
+
+.ana-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ana-nav-count {
+  min-width: 36px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-nav {
+  padding: 5px 7px;
+}
+
+.btn-nav svg {
+  display: block;
+}
+
+.btn-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-nav:disabled:hover {
+  background: transparent;
+  border-color: var(--border);
 }
 
 /* ---------- Settings modal ---------- */

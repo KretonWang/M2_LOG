@@ -66,6 +66,13 @@
   "ana.readFail": "Failed to read file",
   "ana.binary": "Binary file - cannot preview",
   "ana.truncated": "truncated",
+  "ana.line": "Line",
+  "ana.error": "Error",
+  "ana.warning": "Warning",
+  "ana.prev": "Previous (Shift+F3)",
+  "ana.next": "Next (F3)",
+  "ana.filterErr": "Toggle error markers",
+  "ana.filterWarn": "Toggle warning markers",
   "toast.copyOk": "Copied to clipboard",
   "toast.copyFail": "Copy failed: ",
   "settings.title": "Settings",
@@ -75,5 +82,8 @@
   "settings.preview": "Preview: ",
   "btn.resetFields": "Reset",
   "btn.resetFields.title": "Reset experiment fields to defaults",
-  "toast.resetOk": "Fields reset to defaults"
+  "toast.resetOk": "Fields reset to defaults",
+  "btn.nextExp": "Next experiment",
+  "btn.nextExp.title": "Clear name and reset LOGs to default; keep other fields",
+  "toast.nextOk": "Fields kept, LOGs reset to default — enter the next experiment name"
 }

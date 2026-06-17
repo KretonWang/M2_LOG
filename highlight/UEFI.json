@@ -1,0 +1,20 @@
+{
+  "_comment": "UEFI log highlight rules. Edit this file to add/adjust highlighting. Each rule: name, level (error|warn|info), pattern (JavaScript regex source, case-insensitive). Whole-line tint follows the highest level matched on that line.",
+  "rules": [
+    {
+      "name": "error",
+      "level": "error",
+      "pattern": "\\b(?:error|err|fail(?:ed|ure)?|fatal|panic|exception|assert(?:ion)?|abort(?:ed)?|halt|hang|bugcheck|unexpected|invalid|corrupt(?:ed)?)\\b"
+    },
+    {
+      "name": "efi-error-status",
+      "level": "error",
+      "pattern": "EFI_[A-Z0-9_]*?(?:ERROR|NOT_FOUND|UNSUPPORTED|TIMEOUT|ABORTED|SECURITY_VIOLATION|DEVICE_ERROR|ACCESS_DENIED)"
+    },
+    {
+      "name": "warning",
+      "level": "warn",
+      "pattern": "\\b(?:warn(?:ing)?|timeout|timed?\\s*out|retry|retries|retrying|skip(?:ped)?|deprecated)\\b"
+    }
+  ]
+}

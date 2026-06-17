@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('m2log', {
   logRoot: () => ipcRenderer.invoke('fs:logRoot'),
   listDir: (dirPath) => ipcRenderer.invoke('fs:list', dirPath),
   readText: (filePath) => ipcRenderer.invoke('fs:readText', filePath),
+  loadHighlight: (type) => ipcRenderer.invoke('hl:load', type),
   loadI18n: (lang) => ipcRenderer.invoke('i18n:load', lang),
 });

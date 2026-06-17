@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { ipcMain, dialog, BrowserWindow, app } = require('electron');
 const { exportLog, openFolder } = require('./logwriter');
-const { defaultOutputDir } = require('./paths');
+const { defaultOutputDir, appBaseDir } = require('./paths');
 
 /** Register all IPC handlers used by the renderer through the preload bridge. */
 function registerIpc() {
@@ -119,6 +119,21 @@ function registerIpc() {
       }
     } catch (err) {
       return { ok: false, error: err.message };
+    }
+  });
+
+  // Load highlight rules for a LOG type from <appBaseDir>/highlight/<TYPE>.json.
+  ipcMain.handle('hl:load', async (_evt, type) => {
+    try {
+      const safe = String(type || '').replace(/[^A-Za-z0-9._-]/g, '').toUpperCase();
+      if (!safe) return { ok: true, rules: [] };
+      const file = path.join(appBaseDir(), 'highlight', `${safe}.json`);
+      if (!fs.existsSync(file)) return { ok: true, rules: [] };
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const rules = Array.isArray(data) ? data : data && Array.isArray(data.rules) ? data.rules : [];
+      return { ok: true, rules };
+    } catch (err) {
+      return { ok: false, error: err.message, rules: [] };
     }
   });
 

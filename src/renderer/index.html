@@ -83,6 +83,13 @@
             <h2 data-i18n="panel.expFields">實驗欄位</h2>
             <div class="panel-head-right">
               <span class="hint" data-i18n="panel.expFields.hint">Experiment Info</span>
+              <button type="button" class="btn btn-ghost btn-sm" id="btnNextExp" data-i18n-title="btn.nextExp.title" title="清空實驗名稱與 LOG（還原預設），其餘欄位沿用">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="13 17 18 12 13 7" />
+                  <polyline points="6 17 11 12 6 7" />
+                </svg>
+                <span data-i18n="btn.nextExp">下一個實驗</span>
+              </button>
               <button type="button" class="btn btn-ghost btn-sm" id="btnResetFields" data-i18n-title="btn.resetFields.title" title="把實驗欄位還原成預設值">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="1 4 1 10 7 10" />
@@ -199,13 +206,34 @@
             <section class="panel ana-view-panel">
               <div class="panel-head">
                 <h2 id="anaViewName" data-i18n="ana.viewer">檢視</h2>
+                <div class="ana-nav" id="anaNav">
+                  <button class="ana-chip err active" id="chipErr" type="button" data-i18n-title="ana.filterErr" title="切換錯誤標記">
+                    <span class="ana-chip-dot"></span><span data-i18n="ana.error">錯誤</span>
+                  </button>
+                  <button class="ana-chip warn active" id="chipWarn" type="button" data-i18n-title="ana.filterWarn" title="切換警告標記">
+                    <span class="ana-chip-dot"></span><span data-i18n="ana.warning">警告</span>
+                  </button>
+                  <span class="ana-nav-count" id="anaNavCount">0</span>
+                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaPrev" type="button" data-i18n-title="ana.prev" title="上一個 (Shift+F3)" disabled>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaNext" type="button" data-i18n-title="ana.next" title="下一個 (F3)" disabled>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
                 <div class="log-tools">
                   <span class="counter" id="anaViewMeta"></span>
                   <button class="btn btn-ghost btn-sm" id="btnAnaCopy" data-i18n="ana.copy">複製</button>
                 </div>
               </div>
               <div class="panel-body ana-view">
-                <pre class="ana-pre" id="anaViewContent"></pre>
+                <div class="ana-scroll" id="anaScroll">
+                  <div class="ana-code" id="anaViewContent"></div>
+                </div>
+                <div class="ana-ruler" id="anaRuler" hidden>
+                  <div class="ana-ruler-ticks" id="anaRulerTicks"></div>
+                  <div class="ana-ruler-view" id="anaRulerView"></div>
+                </div>
               </div>
             </section>
           </div>

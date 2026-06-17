@@ -148,6 +148,13 @@ if (splitter && layout) {
 }
 
 /* ---------- Log entries (dynamic tabs / panes) ---------- */
+function defaultLogs() {
+  return [
+    { id: uid(), type: 'UEFI', content: '' },
+    { id: uid(), type: 'SAM', content: '' },
+  ];
+}
+
 function loadLogs() {
   let saved = null;
   try {
@@ -158,10 +165,7 @@ function loadLogs() {
   if (Array.isArray(saved) && saved.length) {
     logs = saved.map((l) => ({ id: uid(), type: String(l.type || ''), content: String(l.content || '') }));
   } else {
-    logs = [
-      { id: uid(), type: 'UEFI', content: '' },
-      { id: uid(), type: 'SAM', content: '' },
-    ];
+    logs = defaultLogs();
   }
   activeLogId = logs[0].id;
   renderLogs();
@@ -538,11 +542,25 @@ function resetFields() {
   $('#experimentName').focus();
 }
 
+/* ---------- Next experiment (keep field settings, reset name + LOGs to default) ---------- */
+function nextExperiment() {
+  $('#experimentName').value = '';
+  saveForm();
+  updateFolderPreview();
+  logs = defaultLogs();
+  activeLogId = logs[0].id;
+  saveLogs();
+  renderLogs();
+  toast(t('toast.nextOk'), 'info');
+  $('#experimentName').focus();
+}
+
 /* ---------- Wire up ---------- */
 $('#btnExport').addEventListener('click', doExport);
 $('#btnOpenExplorer').addEventListener('click', () => openFolder(state.lastExportPath));
 $('#btnBrowseBase').addEventListener('click', pickOutputBase);
 $('#btnResetFields').addEventListener('click', resetFields);
+$('#btnNextExp').addEventListener('click', nextExperiment);
 $('#btnAddField').addEventListener('click', () => {
   addCustomRow();
   saveCustomFields();
@@ -574,6 +592,7 @@ const ANA_FOLDER_SVG =
 const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 const ana = { root: '' };
+const anaNav = { markers: [], targets: [], pos: -1, levels: { error: true, warn: true } };
 let anaReady = false;
 
 function formatBytes(n) {
@@ -680,14 +699,211 @@ async function anaViewFile(entry, row) {
   $('#anaViewName').textContent = entry.name;
   $('#anaViewMeta').textContent = '';
   const content = $('#anaViewContent');
+  const ruler = document.getElementById('anaRuler');
+  if (ruler) ruler.hidden = true;
+  anaNav.markers = [];
+  anaNavRebuild();
   content.textContent = t('ana.loading');
   const res = await window.m2log.readText(entry.path);
   if (!res || !res.ok) {
     content.textContent = res && res.binary ? t('ana.binary') : (res && res.error) || t('ana.readFail');
     return;
   }
-  content.textContent = res.content + (res.truncated ? `\n\n... [${t('ana.truncated')}]` : '');
+  const rules = await anaGetRules(entry.name);
+  let text = res.content;
+  if (res.truncated) text += `\n\n... [${t('ana.truncated')}]`;
+  anaRenderContent(text, rules);
   $('#anaViewMeta').textContent = formatBytes(res.size) + (res.truncated ? ' · ' + t('ana.truncated') : '');
+}
+
+/* ---------- Highlight rules (per LOG type, loaded from /highlight) ---------- */
+const anaRulesCache = {};
+
+function anaCompileRules(ruleList) {
+  const compiled = [];
+  (ruleList || []).forEach((r) => {
+    if (!r || !r.pattern) return;
+    const level = String(r.level || 'info').replace(/[^a-z]/gi, '').toLowerCase() || 'info';
+    let flags = 'g';
+    if (String(r.flags == null ? 'i' : r.flags).includes('i')) flags += 'i';
+    try {
+      compiled.push({ re: new RegExp(r.pattern, flags), level });
+    } catch (e) {
+      /* skip invalid pattern */
+    }
+  });
+  return { compiled };
+}
+
+async function anaGetRules(filename) {
+  const base = String(filename || '')
+    .replace(/\.[^.]*$/, '')
+    .replace(/_\d+$/, '')
+    .toUpperCase();
+  if (Object.prototype.hasOwnProperty.call(anaRulesCache, base)) return anaRulesCache[base];
+  let compiled = { compiled: [] };
+  try {
+    const res = await window.m2log.loadHighlight(base);
+    if (res && res.ok && Array.isArray(res.rules)) compiled = anaCompileRules(res.rules);
+  } catch (e) {
+    /* ignore */
+  }
+  anaRulesCache[base] = compiled;
+  return compiled;
+}
+
+const ANA_RANK = { info: 1, warn: 2, error: 3 };
+
+function anaHighlightLine(line, rules) {
+  const escaped = escapeHtml(line);
+  const compiled = rules && rules.compiled;
+  if (!compiled || !compiled.length) return { html: escaped, level: '' };
+  const intervals = [];
+  compiled.forEach((c) => {
+    c.re.lastIndex = 0;
+    let m;
+    while ((m = c.re.exec(escaped)) !== null) {
+      if (m[0] === '') {
+        c.re.lastIndex += 1;
+        continue;
+      }
+      intervals.push({ s: m.index, e: m.index + m[0].length, level: c.level, r: ANA_RANK[c.level] || 1 });
+    }
+  });
+  if (!intervals.length) return { html: escaped, level: '' };
+  intervals.sort((a, b) => a.s - b.s || b.r - a.r);
+  let out = '';
+  let pos = 0;
+  let maxRank = 0;
+  let maxLevel = '';
+  intervals.forEach((iv) => {
+    if (iv.s < pos) return;
+    if (iv.s > pos) out += escaped.slice(pos, iv.s);
+    out += `<span class="hl-${iv.level}">${escaped.slice(iv.s, iv.e)}</span>`;
+    pos = iv.e;
+    if (iv.r > maxRank) {
+      maxRank = iv.r;
+      maxLevel = iv.level;
+    }
+  });
+  out += escaped.slice(pos);
+  return { html: out, level: maxLevel };
+}
+
+function anaRenderContent(text, rules) {
+  const el = $('#anaViewContent');
+  if (!el) return;
+  const lines = String(text).split(/\r\n|\r|\n/);
+  const markers = [];
+  let html = '';
+  for (let i = 0; i < lines.length; i += 1) {
+    const res = anaHighlightLine(lines[i], rules);
+    const lvl = res.level ? ' lvl-' + res.level : '';
+    if (res.level === 'error' || res.level === 'warn') markers.push({ i, level: res.level });
+    html += `<div class="ana-line${lvl}"><span class="ana-ln">${i + 1}</span><span class="ana-lc">${res.html}</span></div>`;
+  }
+  el.innerHTML = html;
+  const scroller = document.getElementById('anaScroll');
+  if (scroller) scroller.scrollTop = 0;
+  anaBuildRuler(markers, lines.length);
+  anaNav.markers = markers;
+  anaNavRebuild();
+}
+
+// Build the right-edge overview ruler: one colored tick per error/warn line.
+function anaBuildRuler(markers, total) {
+  const ticks = document.getElementById('anaRulerTicks');
+  if (ticks) {
+    if (!markers || !markers.length || total <= 0) {
+      ticks.innerHTML = '';
+    } else {
+      let html = '';
+      markers.forEach((m) => {
+        const top = (m.i / total) * 100;
+        const cls = m.level === 'error' ? 'err' : 'warn';
+        html += `<div class="ana-ruler-tick ${cls}" style="top:${top.toFixed(3)}%" data-line="${m.i}" title="${t('ana.line')} ${m.i + 1}"></div>`;
+      });
+      ticks.innerHTML = html;
+    }
+  }
+  anaUpdateRuler();
+}
+
+// Show/position the minimap and the current-viewport indicator box.
+function anaUpdateRuler() {
+  const ruler = document.getElementById('anaRuler');
+  const view = document.getElementById('anaRulerView');
+  const scroller = document.getElementById('anaScroll');
+  if (!ruler || !view || !scroller) return;
+  const sh = scroller.scrollHeight;
+  const ch = scroller.clientHeight;
+  const overflow = sh > ch + 1;
+  const hasTicks = !!ruler.querySelector('.ana-ruler-tick');
+  if (!overflow && !hasTicks) {
+    ruler.hidden = true;
+    return;
+  }
+  ruler.hidden = false;
+  if (overflow) {
+    view.style.display = 'block';
+    view.style.top = ((scroller.scrollTop / sh) * 100).toFixed(3) + '%';
+    view.style.height = Math.min(100, (ch / sh) * 100).toFixed(3) + '%';
+  } else {
+    view.style.display = 'none';
+  }
+}
+
+// Scroll the viewer so the given line index is centered, with a brief flash.
+function anaScrollToLine(idx) {
+  const scroller = document.getElementById('anaScroll');
+  const content = document.getElementById('anaViewContent');
+  if (!scroller || !content) return;
+  const row = content.children[idx];
+  if (!row) return;
+  const sRect = scroller.getBoundingClientRect();
+  const rRect = row.getBoundingClientRect();
+  scroller.scrollTop += rRect.top - sRect.top - scroller.clientHeight / 2 + rRect.height / 2;
+  row.classList.remove('flash');
+  void row.offsetWidth;
+  row.classList.add('flash');
+  window.setTimeout(() => row.classList.remove('flash'), 1300);
+}
+
+// Rebuild navigation targets from current markers, filtered by active levels.
+function anaNavRebuild() {
+  anaNav.targets = anaNav.markers
+    .filter((m) => anaNav.levels[m.level])
+    .map((m) => m.i)
+    .sort((a, b) => a - b);
+  anaNav.pos = -1;
+  anaNavUpdateCounter();
+}
+
+function anaNavUpdateCounter() {
+  const total = anaNav.targets.length;
+  const cur = anaNav.pos >= 0 ? anaNav.pos + 1 : 0;
+  const el = document.getElementById('anaNavCount');
+  if (el) el.textContent = total ? `${cur}/${total}` : '0';
+  const prev = document.getElementById('btnAnaPrev');
+  const next = document.getElementById('btnAnaNext');
+  if (prev) prev.disabled = total === 0;
+  if (next) next.disabled = total === 0;
+}
+
+// Jump to the next (dir=1) or previous (dir=-1) matching line; wraps around.
+function anaNavGo(dir) {
+  const targets = anaNav.targets;
+  if (!targets.length) return;
+  if (anaNav.pos === -1) anaNav.pos = dir > 0 ? 0 : targets.length - 1;
+  else anaNav.pos = (anaNav.pos + dir + targets.length) % targets.length;
+  anaScrollToLine(targets[anaNav.pos]);
+  anaNavUpdateCounter();
+}
+
+function anaNavToggleLevel(level, btn) {
+  anaNav.levels[level] = !anaNav.levels[level];
+  if (btn) btn.classList.toggle('active', anaNav.levels[level]);
+  anaNavRebuild();
 }
 
 $('#btnAnaBrowse').addEventListener('click', async () => {
@@ -707,13 +923,69 @@ $('#btnAnaOpen').addEventListener('click', () => {
   if (ana.root) window.m2log.openFolder(ana.root);
 });
 $('#btnAnaCopy').addEventListener('click', async () => {
-  const text = $('#anaViewContent').textContent || '';
+  const cells = $('#anaViewContent').querySelectorAll('.ana-lc');
+  const text = cells.length
+    ? Array.from(cells)
+        .map((n) => n.textContent)
+        .join('\n')
+    : $('#anaViewContent').textContent || '';
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
     toast(t('toast.copyOk'), 'success');
   } catch (e) {
     toast(t('toast.copyFail') + e.message, 'error');
+  }
+});
+$('#anaRuler').addEventListener('click', (e) => {
+  const tick = e.target.closest('.ana-ruler-tick');
+  if (!tick) return;
+  const idx = parseInt(tick.getAttribute('data-line'), 10);
+  if (Number.isNaN(idx)) return;
+  anaScrollToLine(idx);
+  const p = anaNav.targets.indexOf(idx);
+  if (p >= 0) {
+    anaNav.pos = p;
+    anaNavUpdateCounter();
+  }
+});
+$('#anaRuler').addEventListener('mousedown', (e) => {
+  if (e.target.closest('.ana-ruler-tick')) return;
+  const ruler = document.getElementById('anaRuler');
+  const scroller = document.getElementById('anaScroll');
+  if (!ruler || !scroller) return;
+  e.preventDefault();
+  const rect = ruler.getBoundingClientRect();
+  const jump = (clientY) => {
+    const ratio = (clientY - rect.top) / rect.height;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    scroller.scrollTop = Math.max(0, Math.min(max, ratio * scroller.scrollHeight - scroller.clientHeight / 2));
+  };
+  jump(e.clientY);
+  const onMove = (ev) => jump(ev.clientY);
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.classList.remove('ana-ruler-dragging');
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  document.body.classList.add('ana-ruler-dragging');
+});
+if (document.getElementById('anaScroll')) {
+  document.getElementById('anaScroll').addEventListener('scroll', anaUpdateRuler);
+}
+window.addEventListener('resize', anaUpdateRuler);
+$('#chipErr').addEventListener('click', (e) => anaNavToggleLevel('error', e.currentTarget));
+$('#chipWarn').addEventListener('click', (e) => anaNavToggleLevel('warn', e.currentTarget));
+$('#btnAnaPrev').addEventListener('click', () => anaNavGo(-1));
+$('#btnAnaNext').addEventListener('click', () => anaNavGo(1));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'F3') {
+    const av = document.getElementById('view-analysis');
+    if (!av || !av.classList.contains('active')) return;
+    e.preventDefault();
+    anaNavGo(e.shiftKey ? -1 : 1);
   }
 });
 

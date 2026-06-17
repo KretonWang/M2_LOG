@@ -66,6 +66,13 @@
   "ana.readFail": "讀取檔案失敗",
   "ana.binary": "二進位檔，無法預覽",
   "ana.truncated": "已截斷",
+  "ana.line": "行",
+  "ana.error": "錯誤",
+  "ana.warning": "警告",
+  "ana.prev": "上一個 (Shift+F3)",
+  "ana.next": "下一個 (F3)",
+  "ana.filterErr": "切換錯誤標記",
+  "ana.filterWarn": "切換警告標記",
   "toast.copyOk": "已複製到剪貼簿",
   "toast.copyFail": "複製失敗：",
   "settings.title": "設定",
@@ -75,5 +82,8 @@
   "settings.preview": "預覽：",
   "btn.resetFields": "還原預設",
   "btn.resetFields.title": "把實驗欄位還原成預設值",
-  "toast.resetOk": "已還原預設值"
+  "toast.resetOk": "已還原預設值",
+  "btn.nextExp": "下一個實驗",
+  "btn.nextExp.title": "清空實驗名稱與 LOG（還原預設），其餘欄位沿用",
+  "toast.nextOk": "已沿用欄位、LOG 已還原預設，請輸入下一個實驗名稱"
 }
