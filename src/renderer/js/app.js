@@ -523,10 +523,26 @@ async function pickOutputBase() {
   }
 }
 
+/* ---------- Reset fields to defaults ---------- */
+function resetFields() {
+  formFields.forEach((f) => {
+    $(`#${f}`).value = '';
+  });
+  $('#date').value = todayStr();
+  saveForm();
+  $('#customFields').innerHTML = '';
+  addCustomRow();
+  saveCustomFields();
+  updateFolderPreview();
+  toast(t('toast.resetOk'), 'info');
+  $('#experimentName').focus();
+}
+
 /* ---------- Wire up ---------- */
 $('#btnExport').addEventListener('click', doExport);
 $('#btnOpenExplorer').addEventListener('click', () => openFolder(state.lastExportPath));
 $('#btnBrowseBase').addEventListener('click', pickOutputBase);
+$('#btnResetFields').addEventListener('click', resetFields);
 $('#btnAddField').addEventListener('click', () => {
   addCustomRow();
   saveCustomFields();

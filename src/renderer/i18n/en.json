@@ -72,5 +72,8 @@
   "settings.folderLen": "Folder name length",
   "settings.folderLen.opt": "(1-40)",
   "settings.folderLen.note": "Max length of the experiment-name abbreviation in the output folder.",
-  "settings.preview": "Preview: "
+  "settings.preview": "Preview: ",
+  "btn.resetFields": "Reset",
+  "btn.resetFields.title": "Reset experiment fields to defaults",
+  "toast.resetOk": "Fields reset to defaults"
 }

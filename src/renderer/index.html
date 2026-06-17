@@ -81,7 +81,16 @@
         <section class="panel panel-form">
           <div class="panel-head">
             <h2 data-i18n="panel.expFields">實驗欄位</h2>
-            <span class="hint" data-i18n="panel.expFields.hint">Experiment Info</span>
+            <div class="panel-head-right">
+              <span class="hint" data-i18n="panel.expFields.hint">Experiment Info</span>
+              <button type="button" class="btn btn-ghost btn-sm" id="btnResetFields" data-i18n-title="btn.resetFields.title" title="把實驗欄位還原成預設值">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                <span data-i18n="btn.resetFields">還原預設</span>
+              </button>
+            </div>
           </div>
           <div class="panel-body">
             <div class="field">

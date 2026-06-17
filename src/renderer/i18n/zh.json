@@ -72,5 +72,8 @@
   "settings.folderLen": "資料夾名稱長度",
   "settings.folderLen.opt": "(1–40)",
   "settings.folderLen.note": "輸出資料夾中實驗名稱縮寫的最大長度。",
-  "settings.preview": "預覽："
+  "settings.preview": "預覽：",
+  "btn.resetFields": "還原預設",
+  "btn.resetFields.title": "把實驗欄位還原成預設值",
+  "toast.resetOk": "已還原預設值"
 }

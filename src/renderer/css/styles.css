@@ -46,10 +46,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 18px;
-  gap: 16px;
-  max-width: 1500px;
-  margin: 0 auto;
+  padding: 12px 14px;
+  gap: 14px;
 }
 
 /* ---------- Topbar ---------- */
@@ -232,6 +230,12 @@ body.col-resizing {
   color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+.panel-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .panel-body {
