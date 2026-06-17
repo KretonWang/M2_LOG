@@ -1,35 +1,50 @@
 {
   "name": "m2-log-tool",
   "version": "1.0.0",
-  "description": "實驗 LOG 收集與輸出工具 (UEFI / SAM) - LOG collector with auto folder export",
-  "main": "server.js",
-  "bin": "server.js",
+  "description": "Experiment LOG collector and exporter (UEFI / SAM) - Electron desktop app",
+  "author": "OA Hsiao",
+  "license": "MIT",
+  "main": "src/main/main.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "build": "pkg . --targets node22-win-x64 --output dist/M2-LOG-Tool.exe"
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
   },
-  "pkg": {
-    "assets": [
-      "public/**/*"
+  "build": {
+    "appId": "com.m2station.m2log",
+    "productName": "M2_LOG",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
     ],
-    "targets": [
-      "node22-win-x64"
-    ],
-    "outputPath": "dist"
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "M2 LOG Tool"
+    }
   },
   "keywords": [
     "log",
     "uefi",
     "sam",
-    "tool"
+    "tool",
+    "electron"
   ],
-  "license": "MIT",
   "dependencies": {
-    "archiver": "7.0.1",
-    "express": "^4.19.2"
+    "archiver": "7.0.1"
   },
   "devDependencies": {
-    "@yao-pkg/pkg": "^6.20.0"
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
   }
 }

@@ -3,8 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';"
+    />
     <title>M2 LOG Tool</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="css/styles.css" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9D%3C/text%3E%3C/svg%3E" />
   </head>
   <body>
@@ -36,9 +40,22 @@
             </svg>
             <span data-i18n="tab.logoutput">LOG_OUTPUT</span>
           </button>
+          <button class="feature-tab" data-view="analysis">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span data-i18n="tab.analysis">LOG 分析</span>
+          </button>
         </nav>
 
         <div class="topbar-actions">
+          <button class="btn btn-ghost btn-icon" id="btnSettings" data-i18n-title="settings.title" title="設定">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
           <button class="btn btn-ghost btn-lang" id="btnLang" title="切換語言 / Switch language">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -105,7 +122,10 @@
 
             <div class="field">
               <label for="outputBase"><span data-i18n="field.outputBase">輸出根目錄</span> <span class="opt" data-i18n="field.outputBase.opt">(選填)</span></label>
-              <input id="outputBase" type="text" data-i18n-ph="field.outputBase.ph" placeholder="留空 = 專案內 LOG_OUTPUT/" autocomplete="off" />
+              <div style="display:flex; gap:8px; align-items:stretch;">
+                <input id="outputBase" type="text" data-i18n-ph="field.outputBase.ph" placeholder="留空 = 專案內 LOG_OUTPUT/" autocomplete="off" style="flex:1;" />
+                <button type="button" class="btn btn-ghost btn-sm" id="btnBrowseBase" data-i18n="btn.browse">Browse...</button>
+              </div>
               <small data-i18n="field.outputBase.note">可填絕對路徑，例如 D:\\Logs</small>
             </div>
           </div>
@@ -114,30 +134,16 @@
         <!-- Draggable splitter -->
         <div class="splitter" id="splitter" data-i18n-title="splitter.title" title="拖曳調整左右寬度"></div>
 
-        <!-- Right: log input -->
+        <!-- Right: log input (dynamic LOG types) -->
         <section class="panel panel-log">
           <div class="panel-head">
-            <div class="tabs">
-              <button class="tab active" data-target="uefi">
-                <span class="dot dot-uefi"></span> UEFI
-              </button>
-              <button class="tab" data-target="sam">
-                <span class="dot dot-sam"></span> SAM
-              </button>
-            </div>
+            <div class="tabs" id="logTabs"></div>
             <div class="log-tools">
               <span class="counter" id="counter">0 行 · 0 字元</span>
-              <button class="btn btn-ghost btn-sm" id="btnClearLogs" data-i18n-title="btn.clear.title" data-i18n="btn.clear" title="清空兩個 LOG">清除</button>
+              <button class="btn btn-ghost btn-sm" id="btnClearLogs" data-i18n-title="btn.clear.title" data-i18n="btn.clear" title="清空目前 LOG">清除</button>
             </div>
           </div>
-          <div class="panel-body log-body">
-            <div class="log-pane active" id="pane-uefi">
-              <textarea id="uefiLog" class="log-input" spellcheck="false" data-i18n-ph="log.uefi.ph" placeholder="在此貼上 UEFI LOG..."></textarea>
-            </div>
-            <div class="log-pane" id="pane-sam">
-              <textarea id="samLog" class="log-input" spellcheck="false" data-i18n-ph="log.sam.ph" placeholder="在此貼上 SAM LOG..."></textarea>
-            </div>
-          </div>
+          <div class="panel-body log-body" id="logBody"></div>
         </section>
       </main>
 
@@ -162,11 +168,64 @@
       <section class="result hidden" id="result"></section>
       </div>
       <!-- ===================== /LOG_OUTPUT view ===================== -->
+
+      <!-- ===================== LOG Analysis view ===================== -->
+      <div class="feature-view" id="view-analysis">
+        <div class="analysis">
+          <div class="analysis-toolbar">
+            <button class="btn btn-ghost btn-sm" id="btnAnaBrowse" data-i18n="ana.browse">選擇 LOG 目錄</button>
+            <button class="btn btn-ghost btn-sm" id="btnAnaReset" data-i18n="ana.reset">回到輸出目錄</button>
+            <button class="btn btn-ghost btn-sm" id="btnAnaRefresh" data-i18n="ana.refresh">重新整理</button>
+            <button class="btn btn-ghost btn-sm" id="btnAnaOpen" data-i18n="ana.open">開啟資料夾</button>
+            <code class="ana-path" id="anaPath"></code>
+          </div>
+          <div class="analysis-body">
+            <aside class="panel ana-tree-panel">
+              <div class="panel-head">
+                <h2 data-i18n="ana.files">檔案</h2>
+                <span class="hint" id="anaCount"></span>
+              </div>
+              <div class="panel-body ana-tree" id="anaTree"></div>
+            </aside>
+            <section class="panel ana-view-panel">
+              <div class="panel-head">
+                <h2 id="anaViewName" data-i18n="ana.viewer">檢視</h2>
+                <div class="log-tools">
+                  <span class="counter" id="anaViewMeta"></span>
+                  <button class="btn btn-ghost btn-sm" id="btnAnaCopy" data-i18n="ana.copy">複製</button>
+                </div>
+              </div>
+              <div class="panel-body ana-view">
+                <pre class="ana-pre" id="anaViewContent"></pre>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+      <!-- ===================== /LOG Analysis view ===================== -->
     </div>
 
     <!-- Toasts -->
     <div class="toasts" id="toasts"></div>
 
-    <script src="app.js"></script>
+    <!-- Settings modal -->
+    <div class="modal-overlay hidden" id="settingsModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h2 data-i18n="settings.title">設定</h2>
+          <button class="btn-remove" id="btnSettingsClose" title="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="setAbbrevLen"><span data-i18n="settings.folderLen">資料夾名稱長度</span> <span class="opt" data-i18n="settings.folderLen.opt">(1–40)</span></label>
+            <input id="setAbbrevLen" type="number" min="1" max="40" step="1" />
+            <small data-i18n="settings.folderLen.note">實驗名稱縮寫的最大長度。</small>
+            <small><span data-i18n="settings.preview">預覽：</span><code id="setPreview"></code></small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/app.js"></script>
   </body>
 </html>
