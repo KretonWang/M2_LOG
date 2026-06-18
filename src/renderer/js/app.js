@@ -38,6 +38,13 @@ const formFields = [
 
 const CUSTOM_KEY = 'm2log_custom';
 
+/* ---------- Experiments (each tab = one full experiment) ---------- */
+const FORM_KEY = 'm2log_form';
+const EXP_KEY = 'm2log_experiments';
+const EXP_ACTIVE_KEY = 'm2log_active_exp';
+let experiments = [];
+let activeExpId = null;
+
 /* ---------- i18n ---------- */
 const LANG_KEY = 'm2log_lang';
 let I18N = {};
@@ -59,6 +66,7 @@ function applyI18n() {
     el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
   });
   // Dynamic widgets
+  if (Array.isArray(experiments) && experiments.length) renderExpTabs();
   if (Array.isArray(logs) && logs.length) renderLogs();
   updateCounter();
   document.querySelectorAll('#customFields .custom-row').forEach((row) => {
@@ -155,24 +163,8 @@ function defaultLogs() {
   ];
 }
 
-function loadLogs() {
-  let saved = null;
-  try {
-    saved = JSON.parse(localStorage.getItem(LOGS_KEY) || 'null');
-  } catch (e) {
-    saved = null;
-  }
-  if (Array.isArray(saved) && saved.length) {
-    logs = saved.map((l) => ({ id: uid(), type: String(l.type || ''), content: String(l.content || '') }));
-  } else {
-    logs = defaultLogs();
-  }
-  activeLogId = logs[0].id;
-  renderLogs();
-}
-
 function saveLogs() {
-  localStorage.setItem(LOGS_KEY, JSON.stringify(logs.map((l) => ({ type: l.type, content: l.content }))));
+  persistExperiments();
 }
 
 function setActive(id) {
@@ -301,21 +293,20 @@ function updateCounter() {
 }
 
 /* ---------- Form persistence ---------- */
-function saveForm() {
+function readFormFromDom() {
   const data = {};
   formFields.forEach((f) => (data[f] = $(`#${f}`).value));
-  localStorage.setItem('m2log_form', JSON.stringify(data));
+  return data;
 }
 
-function loadForm() {
-  try {
-    const data = JSON.parse(localStorage.getItem('m2log_form') || '{}');
-    formFields.forEach((f) => {
-      if (data[f] !== undefined) $(`#${f}`).value = data[f];
-    });
-  } catch (e) {
-    /* ignore */
-  }
+function writeFormToDom(form) {
+  formFields.forEach((f) => {
+    $(`#${f}`).value = form && form[f] != null ? form[f] : '';
+  });
+}
+
+function saveForm() {
+  persistExperiments();
 }
 
 formFields.forEach((f) => $(`#${f}`).addEventListener('input', saveForm));
@@ -373,7 +364,7 @@ function getCustomFields() {
 }
 
 function saveCustomFields() {
-  localStorage.setItem(CUSTOM_KEY, JSON.stringify(getCustomFields()));
+  persistExperiments();
 }
 
 function addCustomRow(label = '', value = '') {
@@ -418,19 +409,228 @@ async function grabLatestDownload(row) {
   }
 }
 
-function loadCustomFields() {
-  let saved = [];
+function writeCustomToDom(custom) {
+  $('#customFields').innerHTML = '';
+  if (!custom || !custom.length) {
+    addCustomRow();
+  } else {
+    custom.forEach((f) => addCustomRow(f.label, f.value));
+  }
+}
+
+/* ---------- Experiment tabs (multiple experiments open at once) ---------- */
+function serializeExp(exp) {
+  return {
+    form: { ...(exp.form || {}) },
+    custom: (exp.custom || []).map((c) => ({ label: c.label, value: c.value })),
+    logs: (exp.logs || []).map((l) => ({ type: l.type, content: l.content })),
+  };
+}
+
+function blankForm() {
+  const form = {};
+  formFields.forEach((f) => (form[f] = ''));
+  form.date = todayStr();
+  return form;
+}
+
+function getActiveExp() {
+  return experiments.find((e) => e.id === activeExpId) || null;
+}
+
+/** Snapshot the live DOM (fields + custom + logs) into the active experiment. */
+function captureActiveExp() {
+  const exp = getActiveExp();
+  if (!exp) return;
+  exp.form = readFormFromDom();
+  exp.custom = getCustomFields();
+  exp.logs = logs.map((l) => ({ type: l.type, content: l.content }));
+}
+
+function persistExperiments() {
+  captureActiveExp();
   try {
-    saved = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
+    localStorage.setItem(EXP_KEY, JSON.stringify(experiments.map(serializeExp)));
+    const idx = experiments.findIndex((e) => e.id === activeExpId);
+    localStorage.setItem(EXP_ACTIVE_KEY, String(idx < 0 ? 0 : idx));
   } catch (e) {
     /* ignore */
   }
-  $('#customFields').innerHTML = '';
-  if (saved.length === 0) {
-    addCustomRow();
+  renderExpTabs();
+}
+
+/** Load an experiment's data into the DOM (fields + custom + logs). */
+function restoreExpToDom(exp) {
+  if (!exp) return;
+  writeFormToDom(exp.form);
+  writeCustomToDom(exp.custom);
+  if (Array.isArray(exp.logs) && exp.logs.length) {
+    logs = exp.logs.map((l) => ({ id: uid(), type: String(l.type || ''), content: String(l.content || '') }));
   } else {
-    saved.forEach((f) => addCustomRow(f.label, f.value));
+    logs = defaultLogs();
   }
+  activeLogId = logs[0].id;
+  renderLogs();
+  updateFolderPreview();
+}
+
+function renderExpTabs() {
+  const wrap = $('#expTabs');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  experiments.forEach((exp, idx) => {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'exp-tab' + (exp.id === activeExpId ? ' active' : '');
+    tab.dataset.id = exp.id;
+
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = LOG_COLORS[idx % LOG_COLORS.length];
+    dot.style.boxShadow = `0 0 8px ${LOG_COLORS[idx % LOG_COLORS.length]}`;
+
+    const name = document.createElement('span');
+    name.className = 'exp-tab-name';
+    const label = exp && exp.form ? String(exp.form.experimentName || '').trim() : '';
+    if (label) {
+      name.textContent = label;
+    } else {
+      name.textContent = `${t('exp.tab.untitled', '實驗')} ${idx + 1}`;
+      name.classList.add('untitled');
+    }
+
+    tab.append(dot, name);
+
+    if (experiments.length > 1) {
+      const close = document.createElement('span');
+      close.className = 'exp-tab-close';
+      close.textContent = '\u00d7';
+      close.title = t('exp.close.title', '關閉此實驗');
+      close.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeExperiment(exp.id);
+      });
+      tab.appendChild(close);
+    }
+
+    tab.addEventListener('click', () => switchExperiment(exp.id));
+    wrap.appendChild(tab);
+  });
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'exp-tab-add';
+  add.textContent = '+';
+  add.title = t('exp.add.title', '新增實驗');
+  add.addEventListener('click', addExperiment);
+  wrap.appendChild(add);
+}
+
+function switchExperiment(id) {
+  if (id === activeExpId) return;
+  captureActiveExp();
+  const exp = experiments.find((e) => e.id === id);
+  if (!exp) return;
+  activeExpId = id;
+  restoreExpToDom(exp);
+  persistExperiments();
+  $('#experimentName').focus();
+}
+
+/** Add a new experiment tab, inheriting the current setup but with a blank name. */
+function addExperiment() {
+  captureActiveExp();
+  const cur = getActiveExp();
+  const exp = {
+    id: uid(),
+    form: cur ? { ...cur.form, experimentName: '' } : blankForm(),
+    custom: cur ? cur.custom.map((c) => ({ label: c.label, value: c.value })) : [],
+    logs: defaultLogs().map((l) => ({ type: l.type, content: l.content })),
+  };
+  experiments.push(exp);
+  activeExpId = exp.id;
+  restoreExpToDom(exp);
+  persistExperiments();
+  $('#experimentName').focus();
+}
+
+function removeExperiment(id) {
+  if (experiments.length <= 1) {
+    toast(t('toast.minExp', '至少保留一個實驗'), 'error');
+    return;
+  }
+  const exp = experiments.find((e) => e.id === id);
+  if (!exp) return;
+  const hasData =
+    (exp.form && String(exp.form.experimentName || '').trim()) ||
+    (Array.isArray(exp.logs) && exp.logs.some((l) => String(l.content || '').trim()));
+  if (hasData && !window.confirm(t('exp.closeConfirm', '關閉此實驗？尚未輸出的內容將會遺失。'))) {
+    return;
+  }
+  const idx = experiments.findIndex((e) => e.id === id);
+  const wasActive = id === activeExpId;
+  experiments = experiments.filter((e) => e.id !== id);
+  if (wasActive) {
+    const next = experiments[Math.max(0, idx - 1)];
+    activeExpId = next.id;
+    restoreExpToDom(next);
+  }
+  persistExperiments();
+}
+
+/** Pull legacy single-experiment storage (form/custom/logs) into one experiment. */
+function migrateLegacyExperiment() {
+  let form = blankForm();
+  try {
+    const f = JSON.parse(localStorage.getItem(FORM_KEY) || 'null');
+    if (f && typeof f === 'object') form = { ...form, ...f };
+  } catch (e) {
+    /* ignore */
+  }
+  let custom = [];
+  try {
+    const c = JSON.parse(localStorage.getItem(CUSTOM_KEY) || 'null');
+    if (Array.isArray(c)) custom = c.map((x) => ({ label: String(x.label || ''), value: String(x.value || '') }));
+  } catch (e) {
+    /* ignore */
+  }
+  let lg = [];
+  try {
+    const l = JSON.parse(localStorage.getItem(LOGS_KEY) || 'null');
+    if (Array.isArray(l) && l.length) lg = l.map((x) => ({ type: String(x.type || ''), content: String(x.content || '') }));
+  } catch (e) {
+    /* ignore */
+  }
+  if (!lg.length) lg = defaultLogs().map((l) => ({ type: l.type, content: l.content }));
+  if (!form.date) form.date = todayStr();
+  return { id: uid(), form, custom, logs: lg };
+}
+
+function loadExperiments() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(EXP_KEY) || 'null');
+  } catch (e) {
+    saved = null;
+  }
+  if (Array.isArray(saved) && saved.length) {
+    experiments = saved.map((e) => ({
+      id: uid(),
+      form: e.form && typeof e.form === 'object' ? { ...blankForm(), ...e.form } : blankForm(),
+      custom: Array.isArray(e.custom)
+        ? e.custom.map((c) => ({ label: String(c.label || ''), value: String(c.value || '') }))
+        : [],
+      logs:
+        Array.isArray(e.logs) && e.logs.length
+          ? e.logs.map((l) => ({ type: String(l.type || ''), content: String(l.content || '') }))
+          : defaultLogs().map((l) => ({ type: l.type, content: l.content })),
+    }));
+  } else {
+    experiments = [migrateLegacyExperiment()];
+  }
+  let activeIdx = parseInt(localStorage.getItem(EXP_ACTIVE_KEY), 10);
+  if (Number.isNaN(activeIdx) || activeIdx < 0 || activeIdx >= experiments.length) activeIdx = 0;
+  activeExpId = experiments[activeIdx].id;
 }
 
 /* ---------- Toast ---------- */
@@ -1019,9 +1219,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ---------- Init ---------- */
-loadForm();
-loadCustomFields();
-loadLogs();
+loadExperiments();
+restoreExpToDom(getActiveExp());
+renderExpTabs();
 if (!$('#date').value) $('#date').value = todayStr();
 updateFolderPreview();
 loadLang(currentLang);

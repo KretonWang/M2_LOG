@@ -85,5 +85,10 @@
   "toast.resetOk": "Fields reset to defaults",
   "btn.nextExp": "Next experiment",
   "btn.nextExp.title": "Clear name and reset LOGs to default; keep other fields",
-  "toast.nextOk": "Fields kept, LOGs reset to default — enter the next experiment name"
+  "toast.nextOk": "Fields kept, LOGs reset to default — enter the next experiment name",
+  "exp.tab.untitled": "Experiment",
+  "exp.add.title": "Add experiment (new tab)",
+  "exp.close.title": "Close this experiment",
+  "exp.closeConfirm": "Close this experiment? Unexported content will be lost.",
+  "toast.minExp": "Keep at least one experiment"
 }

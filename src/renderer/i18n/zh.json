@@ -85,5 +85,10 @@
   "toast.resetOk": "已還原預設值",
   "btn.nextExp": "下一個實驗",
   "btn.nextExp.title": "清空實驗名稱與 LOG（還原預設），其餘欄位沿用",
-  "toast.nextOk": "已沿用欄位、LOG 已還原預設，請輸入下一個實驗名稱"
+  "toast.nextOk": "已沿用欄位、LOG 已還原預設，請輸入下一個實驗名稱",
+  "exp.tab.untitled": "實驗",
+  "exp.add.title": "新增實驗（另開分頁）",
+  "exp.close.title": "關閉此實驗",
+  "exp.closeConfirm": "關閉此實驗？尚未輸出的內容將會遺失。",
+  "toast.minExp": "至少保留一個實驗"
 }
