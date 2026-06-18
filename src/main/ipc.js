@@ -146,6 +146,22 @@ function registerIpc() {
     }
   });
 
+  // List available highlight types (the *.json files under <appBaseDir>/highlight).
+  ipcMain.handle('hl:list', async () => {
+    try {
+      const dir = path.join(appBaseDir(), 'highlight');
+      if (!fs.existsSync(dir)) return { ok: true, types: [] };
+      const types = fs
+        .readdirSync(dir, { withFileTypes: true })
+        .filter((e) => e.isFile() && /\.json$/i.test(e.name))
+        .map((e) => e.name.replace(/\.json$/i, '').toUpperCase())
+        .sort();
+      return { ok: true, types };
+    } catch (err) {
+      return { ok: false, error: err.message, types: [] };
+    }
+  });
+
   // Load an i18n bundle from disk (avoids fetch on the file:// renderer).
   ipcMain.handle('i18n:load', async (_evt, lang) => {
     try {

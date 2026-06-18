@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('m2log', {
   listDir: (dirPath) => ipcRenderer.invoke('fs:list', dirPath),
   readText: (filePath) => ipcRenderer.invoke('fs:readText', filePath),
   loadHighlight: (type) => ipcRenderer.invoke('hl:load', type),
+  listHighlights: () => ipcRenderer.invoke('hl:list'),
   loadI18n: (lang) => ipcRenderer.invoke('i18n:load', lang),
 });

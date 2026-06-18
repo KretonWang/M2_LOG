@@ -114,7 +114,10 @@ featureTabs.forEach((tab) => {
     const view = tab.dataset.view;
     document.querySelectorAll('.feature-view').forEach((v) => v.classList.remove('active'));
     document.getElementById(`view-${view}`).classList.add('active');
-    if (view === 'analysis') anaEnsureInit();
+    if (view === 'analysis') {
+      anaEnsureInit();
+      window.dispatchEvent(new Event('resize'));
+    }
   });
 });
 
@@ -166,6 +169,58 @@ if (splitter && layout) {
     if (!Number.isNaN(cur)) applyLeftWidth(cur);
   });
 }
+
+/* ---------- Analysis splitter (drag to resize file tree / viewer) ---------- */
+(function () {
+  const anaSplitter = document.getElementById('anaSplitter');
+  const anaBody = document.querySelector('.analysis-body');
+  if (!anaSplitter || !anaBody) return;
+  const ANA_LEFT_KEY = 'm2log_ana_left_width';
+  const ANA_MIN_LEFT = 200;
+  const ANA_MIN_RIGHT = 320;
+
+  function applyAnaLeftWidth(px) {
+    const bw = anaBody.clientWidth;
+    let clamped;
+    if (bw <= 0) {
+      // View not visible yet: only enforce the minimum; re-clamp once shown.
+      clamped = Math.max(px, ANA_MIN_LEFT);
+    } else {
+      const max = Math.max(ANA_MIN_LEFT, bw - ANA_MIN_RIGHT - 8);
+      clamped = Math.min(Math.max(px, ANA_MIN_LEFT), max);
+    }
+    anaBody.style.setProperty('--ana-left-width', clamped + 'px');
+    return clamped;
+  }
+
+  const saved = parseInt(localStorage.getItem(ANA_LEFT_KEY), 10);
+  if (!Number.isNaN(saved)) applyAnaLeftWidth(saved);
+
+  let dragging = false;
+  anaSplitter.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    anaSplitter.classList.add('dragging');
+    document.body.classList.add('col-resizing');
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const rect = anaBody.getBoundingClientRect();
+    applyAnaLeftWidth(e.clientX - rect.left);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    anaSplitter.classList.remove('dragging');
+    document.body.classList.remove('col-resizing');
+    const w = parseInt(getComputedStyle(anaBody).getPropertyValue('--ana-left-width'), 10);
+    if (!Number.isNaN(w)) localStorage.setItem(ANA_LEFT_KEY, String(w));
+  });
+  window.addEventListener('resize', () => {
+    const cur = parseInt(getComputedStyle(anaBody).getPropertyValue('--ana-left-width'), 10);
+    if (!Number.isNaN(cur)) applyAnaLeftWidth(cur);
+  });
+})();
 
 /* ---------- Log entries (dynamic tabs / panes) ---------- */
 function defaultLogs() {
@@ -895,7 +950,7 @@ const ANA_FOLDER_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-const ana = { root: '' };
+const ana = { root: '', hl: 'auto', text: null, name: '' };
 const anaNav = { markers: [], targets: [], pos: -1, levels: { error: true, warn: true } };
 let anaReady = false;
 
@@ -909,6 +964,7 @@ function formatBytes(n) {
 async function anaEnsureInit() {
   if (anaReady) return;
   anaReady = true;
+  await anaPopulateHl();
   const r = await window.m2log.logRoot();
   ana.root = r && r.ok && r.path ? r.path : '';
   await anaRenderTree();
@@ -1007,15 +1063,18 @@ async function anaViewFile(entry, row) {
   if (ruler) ruler.hidden = true;
   anaNav.markers = [];
   anaNavRebuild();
+  ana.name = entry.name;
+  ana.text = null;
   content.textContent = t('ana.loading');
   const res = await window.m2log.readText(entry.path);
   if (!res || !res.ok) {
     content.textContent = res && res.binary ? t('ana.binary') : (res && res.error) || t('ana.readFail');
     return;
   }
-  const rules = await anaGetRules(entry.name);
   let text = res.content;
   if (res.truncated) text += `\n\n... [${t('ana.truncated')}]`;
+  ana.text = text;
+  const rules = await anaResolveRules(entry.name);
   anaRenderContent(text, rules);
   $('#anaViewMeta').textContent = formatBytes(res.size) + (res.truncated ? ' · ' + t('ana.truncated') : '');
 }
@@ -1040,10 +1099,19 @@ function anaCompileRules(ruleList) {
 }
 
 async function anaGetRules(filename) {
-  const base = String(filename || '')
+  return anaGetRulesByType(anaDeriveType(filename));
+}
+
+function anaDeriveType(filename) {
+  return String(filename || '')
     .replace(/\.[^.]*$/, '')
     .replace(/_\d+$/, '')
     .toUpperCase();
+}
+
+async function anaGetRulesByType(type) {
+  const base = String(type || '').toUpperCase();
+  if (!base) return { compiled: [] };
   if (Object.prototype.hasOwnProperty.call(anaRulesCache, base)) return anaRulesCache[base];
   let compiled = { compiled: [] };
   try {
@@ -1054,6 +1122,40 @@ async function anaGetRules(filename) {
   }
   anaRulesCache[base] = compiled;
   return compiled;
+}
+
+/** Resolve which highlight ruleset to use, honoring the manual override. */
+async function anaResolveRules(filename) {
+  if (ana.hl === 'none') return { compiled: [] };
+  if (ana.hl && ana.hl !== 'auto') return anaGetRulesByType(ana.hl);
+  return anaGetRules(filename);
+}
+
+/** Fill the highlight-type selector: Auto + available types + Off. */
+async function anaPopulateHl() {
+  const sel = $('#anaHlSelect');
+  if (!sel) return;
+  let types = [];
+  try {
+    const r = await window.m2log.listHighlights();
+    if (r && r.ok && Array.isArray(r.types)) types = r.types;
+  } catch (e) {
+    /* ignore */
+  }
+  const opts = [
+    { v: 'auto', label: t('ana.hl.auto', '自動'), i18n: 'ana.hl.auto' },
+    ...types.map((ty) => ({ v: ty, label: ty })),
+    { v: 'none', label: t('ana.hl.none', '關閉'), i18n: 'ana.hl.none' },
+  ];
+  sel.innerHTML = '';
+  opts.forEach((o) => {
+    const el = document.createElement('option');
+    el.value = o.v;
+    el.textContent = o.label;
+    if (o.i18n) el.setAttribute('data-i18n', o.i18n);
+    sel.appendChild(el);
+  });
+  sel.value = ana.hl || 'auto';
 }
 
 const ANA_RANK = { info: 1, warn: 2, error: 3 };
@@ -1225,6 +1327,12 @@ $('#btnAnaReset').addEventListener('click', async () => {
 $('#btnAnaRefresh').addEventListener('click', anaRenderTree);
 $('#btnAnaOpen').addEventListener('click', () => {
   if (ana.root) window.m2log.openFolder(ana.root);
+});
+$('#anaHlSelect').addEventListener('change', async (e) => {
+  ana.hl = e.target.value || 'auto';
+  if (ana.text == null) return;
+  const rules = await anaResolveRules(ana.name);
+  anaRenderContent(ana.text, rules);
 });
 $('#btnAnaCopy').addEventListener('click', async () => {
   const cells = $('#anaViewContent').querySelectorAll('.ana-lc');
