@@ -105,13 +105,20 @@
                 </svg>
                 <span data-i18n="btn.resetFields">還原預設</span>
               </button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btnCopySummary" data-i18n-title="btn.copySummary.title" title="把實驗欄位以文字格式複製到剪貼簿">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span data-i18n="btn.copySummary">COPY SUMMARY</span>
+              </button>
             </div>
           </div>
           <div class="panel-body">
             <div class="field">
               <label for="experimentName"><span data-i18n="field.expName">實驗名稱</span> <span class="req">*</span> <span class="opt" data-i18n="field.expName.opt">限英文</span></label>
               <input id="experimentName" type="text" data-i18n-ph="field.expName.ph" placeholder="e.g. Boot Stress Test" autocomplete="off" />
-              <small><span data-i18n="field.expName.note">必須是英文。輸出資料夾：</span><code id="folderPreview">YYYYMMDD_HHmm_ABBREVIATE</code></small>
+              <small><span data-i18n="field.expName.note">必須是英文。輸出資料夾：</span><code id="folderPreview">YYYYMMDD_HHmm_ABBREVIATE</code><button type="button" class="btn-clock" id="btnRefreshTime" data-i18n-title="btn.refreshTime.title" title="更新為目前日期與時間"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg></button></small>
             </div>
 
             <div class="field-row">
@@ -164,6 +171,14 @@
             <div class="tabs" id="logTabs"></div>
             <div class="log-tools">
               <span class="counter" id="counter">0 行 · 0 字元</span>
+              <button class="btn btn-ghost btn-sm" id="btnExportSingle" data-i18n-title="btn.exportSingle.title" title="只輸出目前這個 LOG（含實驗欄位表頭）到專案 LOG_OUTPUT">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span data-i18n="btn.exportSingle">輸出此 LOG</span>
+              </button>
               <button class="btn btn-ghost btn-sm" id="btnClearLogs" data-i18n-title="btn.clear.title" data-i18n="btn.clear" title="清空目前 LOG">清除</button>
             </div>
           </div>
@@ -271,6 +286,11 @@
             <input id="setAbbrevLen" type="number" min="1" max="40" step="1" />
             <small data-i18n="settings.folderLen.note">實驗名稱縮寫的最大長度。</small>
             <small><span data-i18n="settings.preview">預覽：</span><code id="setPreview"></code></small>
+          </div>
+          <div class="field">
+            <label for="setTypeLen"><span data-i18n="settings.typeLen">檔案名稱長度</span> <span class="opt" data-i18n="settings.typeLen.opt">(1–100)</span></label>
+            <input id="setTypeLen" type="number" min="1" max="100" step="1" />
+            <small data-i18n="settings.typeLen.note">LOG 種類（檔名／子資料夾）的最大長度。</small>
           </div>
         </div>
       </div>

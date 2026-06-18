@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ipcMain, dialog, BrowserWindow, app } = require('electron');
-const { exportLog, openFolder } = require('./logwriter');
+const { exportLog, exportSingleLog, openFolder } = require('./logwriter');
 const { defaultOutputDir, appBaseDir } = require('./paths');
 
 /** Register all IPC handlers used by the renderer through the preload bridge. */
@@ -12,6 +12,15 @@ function registerIpc() {
   ipcMain.handle('log:export', async (_evt, payload) => {
     try {
       return await exportLog(payload);
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Export only the active LOG as a single file (with the experiment header).
+  ipcMain.handle('log:exportSingle', async (_evt, payload) => {
+    try {
+      return await exportSingleLog(payload);
     } catch (err) {
       return { ok: false, error: err.message };
     }

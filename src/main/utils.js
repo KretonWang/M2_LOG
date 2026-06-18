@@ -72,14 +72,15 @@ function buildHeader(meta, logType) {
 }
 
 /** Convert a user-entered LOG type into a safe folder/file name (no path traversal). */
-function sanitizeType(type) {
+function sanitizeType(type, max = 40) {
   let s = String(type || '')
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9._-]+/g, '_')
     .replace(/^[._-]+|[._-]+$/g, '');
   if (!s) s = 'LOG';
-  return s.slice(0, 40);
+  const cap = Math.min(100, Math.max(1, parseInt(max, 10) || 40));
+  return s.slice(0, cap);
 }
 
 module.exports = {

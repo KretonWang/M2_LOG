@@ -49,6 +49,7 @@ async function exportLog(payload = {}) {
     customFields = [],
     logs = [],
     abbrevLen,
+    typeLen,
   } = payload;
 
   if (!isEnglishName(experimentName)) {
@@ -95,7 +96,7 @@ async function exportLog(payload = {}) {
   // Each LOG entry -> <TYPE>/<TYPE>.log, with the info header on top.
   const usedNames = new Set();
   for (const log of cleanLogs) {
-    const base = sanitizeType(log.type);
+    const base = sanitizeType(log.type, typeLen);
     let name = base;
     let i = 2;
     while (usedNames.has(name)) {
@@ -128,6 +129,78 @@ async function exportLog(payload = {}) {
   };
 }
 
+/**
+ * Export ONLY one LOG (the active tab) as a single .log file carrying the
+ * experiment-field header on top. Always lands in the in-project LOG_OUTPUT
+ * folder (ignores any custom output root) so a half-finished experiment can be
+ * shared for confirmation before the full export.
+ * Returns { ok, single, targetDir, filePath, fileName, files } or { ok:false, error }.
+ */
+async function exportSingleLog(payload = {}) {
+  const {
+    experimentName = '',
+    date = '',
+    tester = '',
+    testCase = '',
+    notes = '',
+    customFields = [],
+    log = {},
+    abbrevLen,
+    typeLen,
+  } = payload;
+
+  if (!isEnglishName(experimentName)) {
+    return { ok: false, error: 'Experiment name must be English.' };
+  }
+
+  const content = String((log && log.content) || '');
+  if (!content.trim()) {
+    return { ok: false, error: 'LOG is empty.' };
+  }
+  const type = String((log && log.type) || 'LOG').trim() || 'LOG';
+  const typeName = sanitizeType(type, typeLen);
+
+  const cleanCustom = Array.isArray(customFields)
+    ? customFields
+        .map((f) => ({ label: String(f.label || '').trim(), value: String(f.value || '').trim() }))
+        .filter((f) => f.label || f.value)
+    : [];
+
+  // Single-LOG output: a dedicated folder under the in-project LOG_OUTPUT,
+  // with the one .log file (carrying the experiment header) inside it.
+  const baseDir = defaultOutputDir();
+  const now = new Date();
+  const nameMax = Math.min(40, Math.max(1, parseInt(abbrevLen, 10) || 30));
+  const folderName = `${dateStamp(now)}_${timeStamp4(now)}_${abbreviate(experimentName, nameMax)}_${typeName}`;
+  const targetDir = uniqueDir(baseDir, folderName);
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  const meta = {
+    experimentName,
+    date,
+    tester,
+    testCase,
+    notes,
+    customFields: cleanCustom,
+    logTypes: [type],
+    createdAt: now.toISOString(),
+  };
+
+  const fileName = `${typeName}.log`;
+  const filePath = path.join(targetDir, fileName);
+  fs.writeFileSync(filePath, buildHeader(meta, type) + content, 'utf8');
+
+  return {
+    ok: true,
+    single: true,
+    targetDir,
+    folderName: path.basename(targetDir),
+    filePath,
+    fileName,
+    files: [filePath],
+  };
+}
+
 /** Open a folder in the OS file manager. Falls back to the default output dir. */
 function openFolder(targetPath) {
   let target = targetPath && String(targetPath).trim() ? targetPath : defaultOutputDir();
@@ -139,4 +212,4 @@ function openFolder(targetPath) {
   return { ok: true, path: target };
 }
 
-module.exports = { exportLog, openFolder };
+module.exports = { exportLog, exportSingleLog, openFolder };

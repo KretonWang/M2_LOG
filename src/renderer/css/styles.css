@@ -360,6 +360,8 @@ body.col-resizing {
 .panel-head-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
 }
 
@@ -486,6 +488,34 @@ body.col-resizing {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Inline clock button beside the output-folder preview (sets date/time to now). */
+.btn-clock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  padding: 0;
+  vertical-align: middle;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-clock:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.btn-clock svg {
+  display: block;
 }
 
 .custom-empty {

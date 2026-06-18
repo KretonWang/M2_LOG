@@ -17,6 +17,18 @@ function clampLen(n) {
 }
 let abbrevLen = clampLen(localStorage.getItem(ABBREV_KEY));
 
+/* ---------- LOG type (file name) length ---------- */
+const TYPELEN_KEY = 'm2log_type_len';
+const TYPELEN_DEFAULT = 60;
+const TYPELEN_MIN = 1;
+const TYPELEN_MAX = 100;
+function clampTypeLen(n) {
+  n = parseInt(n, 10);
+  if (Number.isNaN(n)) return TYPELEN_DEFAULT;
+  return Math.min(TYPELEN_MAX, Math.max(TYPELEN_MIN, n));
+}
+let typeLen = clampTypeLen(localStorage.getItem(TYPELEN_KEY));
+
 /* ---------- Dynamic LOG entries ---------- */
 const LOGS_KEY = 'm2log_logs';
 const LOG_COLORS = ['#34d399', '#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#f87171', '#22d3ee', '#facc15'];
@@ -653,6 +665,7 @@ async function doExport() {
   payload.customFields = getCustomFields();
   payload.logs = logs.map((l) => ({ type: l.type, content: l.content }));
   payload.abbrevLen = abbrevLen;
+  payload.typeLen = typeLen;
 
   if (!payload.experimentName.trim()) {
     toast(t('toast.needName'), 'error');
@@ -680,6 +693,50 @@ async function doExport() {
     state.lastExportPath = data.targetDir;
     showResult(data);
     toast(t('toast.exportOk'), 'success');
+  } catch (err) {
+    toast(t('toast.exportFail') + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+/* ---------- Export only the active LOG (with the experiment header) ---------- */
+async function doExportSingle() {
+  const log = logs.find((l) => l.id === activeLogId);
+  if (!log) return;
+
+  const payload = {};
+  formFields.forEach((f) => (payload[f] = $(`#${f}`).value));
+  payload.customFields = getCustomFields();
+  payload.log = { type: log.type, content: log.content };
+  payload.abbrevLen = abbrevLen;
+  payload.typeLen = typeLen;
+
+  if (!payload.experimentName.trim()) {
+    toast(t('toast.needName'), 'error');
+    $('#experimentName').focus();
+    return;
+  }
+  if (!isEnglishName(payload.experimentName)) {
+    toast(t('toast.nameEnglish'), 'error');
+    $('#experimentName').focus();
+    return;
+  }
+  if (!(log.content || '').trim()) {
+    toast(t('toast.needLog'), 'error');
+    return;
+  }
+
+  const btn = $('#btnExportSingle');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  try {
+    const data = await window.m2log.exportSingleLog(payload);
+    if (!data || !data.ok) throw new Error((data && data.error) || 'Export failed');
+    state.lastExportPath = data.targetDir;
+    showResult(data);
+    toast(t('toast.exportSingleOk', '已輸出此 LOG'), 'success');
   } catch (err) {
     toast(t('toast.exportFail') + err.message, 'error');
   } finally {
@@ -755,17 +812,64 @@ function nextExperiment() {
   $('#experimentName').focus();
 }
 
+/* ---------- Copy experiment fields as text to the clipboard ---------- */
+async function copySummary() {
+  const lines = [];
+  // Single-line values stay inline ("Label: value"). Multi-line values
+  // (e.g. Notes) put the label on its own line, then the content below.
+  const formatField = (label, value) => {
+    const v = String(value == null ? '' : value);
+    return /[\r\n]/.test(v) ? `${label}:\n${v}` : `${label}: ${v}`;
+  };
+  const add = (label, value) => {
+    const v = String(value == null ? '' : value).trim();
+    if (v) lines.push(formatField(label, v));
+  };
+  add(t('field.expName', '實驗名稱'), $('#experimentName').value);
+  add(t('field.date', '日期'), $('#date').value);
+  add(t('field.tester', '測試人員'), $('#tester').value);
+  add(t('field.testCase', '測試項目'), $('#testCase').value);
+  add(t('field.notes', '備註'), $('#notes').value);
+  getCustomFields().forEach((f) => {
+    const label = String(f.label || '').trim();
+    const value = String(f.value || '').trim();
+    if (label || value) lines.push(formatField(label || '-', value));
+  });
+  add(t('field.outputBase', '輸出根目錄'), $('#outputBase').value);
+
+  // Use CRLF so line breaks survive when pasting into Windows apps
+  // (Notepad, Outlook, some input fields treat a bare \n as no break).
+  const text = lines.join('\n').replace(/\r?\n/g, '\r\n');
+  if (!text) {
+    toast(t('toast.summaryEmpty', '沒有可複製的欄位'), 'error');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(t('toast.summaryOk', '已複製實驗摘要到剪貼簿'), 'success');
+  } catch (e) {
+    toast(t('toast.copyFail') + e.message, 'error');
+  }
+}
+
 /* ---------- Wire up ---------- */
 $('#btnExport').addEventListener('click', doExport);
+$('#btnExportSingle').addEventListener('click', doExportSingle);
 $('#btnOpenExplorer').addEventListener('click', () => openFolder(state.lastExportPath));
 $('#btnBrowseBase').addEventListener('click', pickOutputBase);
 $('#btnResetFields').addEventListener('click', resetFields);
 $('#btnNextExp').addEventListener('click', nextExperiment);
+$('#btnCopySummary').addEventListener('click', copySummary);
 $('#btnAddField').addEventListener('click', () => {
   addCustomRow();
   saveCustomFields();
 });
 $('#experimentName').addEventListener('input', updateFolderPreview);
+$('#btnRefreshTime').addEventListener('click', () => {
+  $('#date').value = todayStr();
+  saveForm();
+  updateFolderPreview();
+});
 $('#btnLang').addEventListener('click', () => {
   loadLang(currentLang === 'zh' ? 'en' : 'zh');
 });
@@ -1192,6 +1296,7 @@ document.addEventListener('keydown', (e) => {
 /* ---------- Settings modal ---------- */
 function openSettings() {
   $('#setAbbrevLen').value = abbrevLen;
+  $('#setTypeLen').value = typeLen;
   populateThemeSelect();
   updateSettingsPreview();
   $('#settingsModal').classList.remove('hidden');
@@ -1214,6 +1319,10 @@ $('#setAbbrevLen').addEventListener('input', () => {
   localStorage.setItem(ABBREV_KEY, String(abbrevLen));
   updateSettingsPreview();
   updateFolderPreview();
+});
+$('#setTypeLen').addEventListener('input', () => {
+  typeLen = clampTypeLen($('#setTypeLen').value);
+  localStorage.setItem(TYPELEN_KEY, String(typeLen));
 });
 
 /* ---------- Theme selector (powered by themes.js) ---------- */
