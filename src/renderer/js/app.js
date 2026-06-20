@@ -958,6 +958,7 @@ const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 const ana = { root: '', hl: 'auto', text: null, name: '' };
 const anaNav = { markers: [], targets: [], pos: -1, levels: { error: true, warn: true } };
+const anaBm = { lines: new Set(), current: -1 };
 let anaReady = false;
 
 function formatBytes(n) {
@@ -1069,6 +1070,9 @@ async function anaViewFile(entry, row) {
   if (ruler) ruler.hidden = true;
   anaNav.markers = [];
   anaNavRebuild();
+  anaBm.lines.clear();
+  anaBm.current = -1;
+  anaBmUpdateCounter();
   ana.name = entry.name;
   ana.text = null;
   content.textContent = t('ana.loading');
@@ -1217,7 +1221,16 @@ function anaRenderContent(text, rules) {
   el.innerHTML = html;
   const scroller = document.getElementById('anaScroll');
   if (scroller) scroller.scrollTop = 0;
+  // Re-apply bookmarks + current line (preserved across re-highlight of the same file)
+  anaBm.lines.forEach((i) => {
+    const row = el.children[i];
+    if (row) row.classList.add('bookmarked');
+  });
+  if (anaBm.current >= 0 && el.children[anaBm.current]) {
+    el.children[anaBm.current].classList.add('current');
+  }
   anaBuildRuler(markers, lines.length);
+  anaBmUpdateCounter();
   anaNav.markers = markers;
   anaNavRebuild();
 }
@@ -1226,17 +1239,19 @@ function anaRenderContent(text, rules) {
 function anaBuildRuler(markers, total) {
   const ticks = document.getElementById('anaRulerTicks');
   if (ticks) {
-    if (!markers || !markers.length || total <= 0) {
-      ticks.innerHTML = '';
-    } else {
-      let html = '';
-      markers.forEach((m) => {
+    let html = '';
+    if (total > 0) {
+      (markers || []).forEach((m) => {
         const top = (m.i / total) * 100;
         const cls = m.level === 'error' ? 'err' : 'warn';
         html += `<div class="ana-ruler-tick ${cls}" style="top:${top.toFixed(3)}%" data-line="${m.i}" title="${t('ana.line')} ${m.i + 1}"></div>`;
       });
-      ticks.innerHTML = html;
+      anaBm.lines.forEach((i) => {
+        const top = (i / total) * 100;
+        html += `<div class="ana-ruler-tick bm" style="top:${top.toFixed(3)}%" data-line="${i}" title="${t('ana.bookmark', '書籤')} ${i + 1}"></div>`;
+      });
     }
+    ticks.innerHTML = html;
   }
   anaUpdateRuler();
 }
@@ -1318,6 +1333,105 @@ function anaNavToggleLevel(level, btn) {
   anaNavRebuild();
 }
 
+/* ---------- Bookmarks (Ctrl+F2 toggle · F2 next · Shift+F2 prev) ---------- */
+// Index of the first line currently visible at the top of the viewport.
+function anaFirstVisibleLine() {
+  const scroller = document.getElementById('anaScroll');
+  const content = document.getElementById('anaViewContent');
+  if (!scroller || !content || !content.children.length) return 0;
+  const top = scroller.scrollTop;
+  const children = content.children;
+  let lo = 0;
+  let hi = children.length - 1;
+  let ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const c = children[mid];
+    if (c.offsetTop + c.offsetHeight > top) {
+      ans = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return ans;
+}
+
+// Mark a line as the "current" one (reference for adding/navigating bookmarks).
+function anaSetCurrentLine(idx) {
+  const content = document.getElementById('anaViewContent');
+  if (!content) return;
+  const prev = content.querySelector('.ana-line.current');
+  if (prev) prev.classList.remove('current');
+  anaBm.current = idx != null && idx >= 0 ? idx : -1;
+  if (anaBm.current >= 0) {
+    const row = content.children[anaBm.current];
+    if (row) row.classList.add('current');
+  }
+}
+
+// Line used when no explicit current line: the clicked line or the first visible.
+function anaRefLine() {
+  if (anaBm.current >= 0) return anaBm.current;
+  return anaFirstVisibleLine();
+}
+
+function anaBmUpdateCounter() {
+  const el = document.getElementById('anaBmCount');
+  if (el) el.textContent = String(anaBm.lines.size);
+}
+
+// Toggle a bookmark on the given line and refresh the gutter, ruler and counter.
+function anaBmToggle(idx) {
+  const content = document.getElementById('anaViewContent');
+  if (!content || idx == null || idx < 0 || idx >= content.children.length) return;
+  let added;
+  if (anaBm.lines.has(idx)) {
+    anaBm.lines.delete(idx);
+    added = false;
+  } else {
+    anaBm.lines.add(idx);
+    added = true;
+  }
+  const row = content.children[idx];
+  if (row) row.classList.toggle('bookmarked', added);
+  anaBuildRuler(anaNav.markers, content.children.length);
+  anaBmUpdateCounter();
+  const label = added ? t('ana.bm.added', '已加入書籤') : t('ana.bm.removed', '已移除書籤');
+  toast(`${label} · ${t('ana.line', '行')} ${idx + 1}`, added ? 'success' : 'info');
+}
+
+// Jump to the next (dir=1) or previous (dir=-1) bookmark relative to the current
+// line; wraps around. Falls back to the first visible line as the reference.
+function anaBmGo(dir) {
+  const sorted = Array.from(anaBm.lines).sort((a, b) => a - b);
+  if (!sorted.length) {
+    toast(t('ana.bm.none', '尚無書籤'), 'info');
+    return;
+  }
+  const ref = anaBm.current >= 0 ? anaBm.current : anaFirstVisibleLine();
+  let target = null;
+  if (dir > 0) {
+    for (let k = 0; k < sorted.length; k += 1) {
+      if (sorted[k] > ref) {
+        target = sorted[k];
+        break;
+      }
+    }
+    if (target == null) target = sorted[0];
+  } else {
+    for (let k = sorted.length - 1; k >= 0; k -= 1) {
+      if (sorted[k] < ref) {
+        target = sorted[k];
+        break;
+      }
+    }
+    if (target == null) target = sorted[sorted.length - 1];
+  }
+  anaSetCurrentLine(target);
+  anaScrollToLine(target);
+}
+
 $('#btnAnaBrowse').addEventListener('click', async () => {
   const r = await window.m2log.pickFolder();
   if (r && r.ok && r.path) {
@@ -1361,6 +1475,7 @@ $('#anaRuler').addEventListener('click', (e) => {
   const idx = parseInt(tick.getAttribute('data-line'), 10);
   if (Number.isNaN(idx)) return;
   anaScrollToLine(idx);
+  anaSetCurrentLine(idx);
   const p = anaNav.targets.indexOf(idx);
   if (p >= 0) {
     anaNav.pos = p;
@@ -1398,12 +1513,36 @@ $('#chipErr').addEventListener('click', (e) => anaNavToggleLevel('error', e.curr
 $('#chipWarn').addEventListener('click', (e) => anaNavToggleLevel('warn', e.currentTarget));
 $('#btnAnaPrev').addEventListener('click', () => anaNavGo(-1));
 $('#btnAnaNext').addEventListener('click', () => anaNavGo(1));
+$('#chipBm').addEventListener('click', () => anaBmGo(1));
+if (document.getElementById('anaViewContent')) {
+  document.getElementById('anaViewContent').addEventListener('click', (e) => {
+    const content = document.getElementById('anaViewContent');
+    const line = e.target.closest('.ana-line');
+    if (!line || !content.contains(line)) return;
+    const idx = Array.prototype.indexOf.call(content.children, line);
+    if (idx >= 0) anaSetCurrentLine(idx);
+  });
+}
 document.addEventListener('keydown', (e) => {
+  if (e.key !== 'F2' && e.key !== 'F3') return;
+  const av = document.getElementById('view-analysis');
+  if (!av || !av.classList.contains('active')) return;
   if (e.key === 'F3') {
-    const av = document.getElementById('view-analysis');
-    if (!av || !av.classList.contains('active')) return;
     e.preventDefault();
     anaNavGo(e.shiftKey ? -1 : 1);
+    return;
+  }
+  // F2 family: bookmarks
+  if (ana.text == null) return;
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) {
+    const idx = anaRefLine();
+    if (idx >= 0) {
+      anaSetCurrentLine(idx);
+      anaBmToggle(idx);
+    }
+  } else {
+    anaBmGo(e.shiftKey ? -1 : 1);
   }
 });
 

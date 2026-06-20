@@ -900,6 +900,10 @@ input[type="date"] {
   background: #fbbf24;
 }
 
+.ana-ruler-tick.bm {
+  background: #38bdf8;
+}
+
 .ana-ruler-view {
   position: absolute;
   left: 0;
@@ -947,6 +951,24 @@ body.ana-ruler-dragging {
 
 .ana-line.flash {
   animation: anaFlash 1.15s ease-out;
+}
+
+.ana-line.current {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.ana-line.current .ana-ln {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.ana-line.bookmarked {
+  box-shadow: inset 3px 0 0 #38bdf8;
+}
+
+.ana-line.bookmarked .ana-ln {
+  color: #38bdf8;
+  font-weight: 700;
 }
 
 @keyframes anaFlash {
@@ -1047,6 +1069,32 @@ body.ana-ruler-dragging {
 
 .ana-chip.warn {
   color: #fbbf24;
+}
+
+.ana-chip.bm {
+  color: #38bdf8;
+  opacity: 1;
+}
+
+.ana-chip.bm:hover {
+  opacity: 1;
+  background: color-mix(in srgb, #38bdf8 14%, transparent);
+  border-color: currentColor;
+}
+
+.ana-bm-count {
+  min-width: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.ana-nav-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 1px;
+  background: var(--border);
 }
 
 .ana-chip.active {
