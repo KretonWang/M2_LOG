@@ -4,9 +4,9 @@
  SPDX-License-Identifier: MIT
 -->
 
-# M2 LOG Tool
+# M2 LOG
 
-> **🌐 Language / 語言:** **English** · [繁體中文](#m2-log-tool--繁體中文)
+> **🌐 Language / 語言:** **English** · [繁體中文](#m2-log--繁體中文)
 
 <a id="english"></a>
 
@@ -139,9 +139,9 @@ package.json electron + electron-builder
 
 <br>
 
-# M2 LOG Tool · 繁體中文
+# M2 LOG · 繁體中文
 
-> **🌐 Language / 語言:** [English](#m2-log-tool) · **繁體中文**
+> **🌐 Language / 語言:** [English](#m2-log) · **繁體中文**
 
 實驗 LOG 收集與輸出的 **Electron 桌面 App**。左邊填寫實驗欄位，右邊可新增多個 **LOG 種類**
 （UEFI / SAM / 自訂）貼上內容，按「輸出」即自動建立目錄並寫入對應檔案（實驗資訊崁在最上面），
