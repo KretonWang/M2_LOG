@@ -773,6 +773,65 @@ input[type="date"] {
   font-size: 13px;
 }
 
+/* ---------- File-tree filter (Type to filter) ---------- */
+.ana-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 10px 6px;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ana-filter:focus-within {
+  border-color: var(--accent);
+}
+
+.ana-filter-ic {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.ana-filter-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.ana-filter-input::placeholder {
+  color: var(--text-faint);
+}
+
+.ana-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ana-filter-clear:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.ana-hidden {
+  display: none !important;
+}
+
 .ana-row {
   display: flex;
   align-items: center;
@@ -1480,6 +1539,28 @@ body.ana-ruler-dragging .ana-ruler-view {
   border-radius: 6px;
 }
 
+/* VS Code-style accent button (used by the analysis "AI" action). */
+.btn-vscode {
+  background-image: none;
+  background-color: #0e639c;
+  border-color: #0e639c;
+  color: #ffffff;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.16);
+}
+
+.btn-vscode:hover {
+  background-image: none;
+  background-color: #1177bb;
+  border-color: #1177bb;
+  color: #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.btn-vscode .ai-spark {
+  color: #ffd23f;
+}
+
 .btn-ghost {
   background-image: none;
   background-color: transparent;
@@ -1775,7 +1856,8 @@ kbd {
   font-weight: 600;
   letter-spacing: 0.2px;
   white-space: nowrap;
-  cursor: default;
+  text-decoration: none;
+  cursor: pointer;
   user-select: none;
   border-radius: 999px;
   border: 1px solid transparent;

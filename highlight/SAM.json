@@ -19,7 +19,7 @@
     {
       "name": "UEFI_SSH",
       "level": "uefissh",
-      "pattern": "Received\\s+(?:GetCapabilities|GetDebugCardPresence|GetBoardIdEx|GetTdmBoardId|GetPcbaTestMode|ChangeBootPolicyBits|GetSecureBootFuseStatusCustomer)\\b"
+      "pattern": "Received\\s+(?:GetCapabilities|GetDebugCardPresence|GetBoardIdEx|GetTdmBoardId|GetPcbaTestMode|ChangeBootPolicyBits|GetSecureBootFuseStatusCustomer|UefiEfiGetTime|UefiEfiSetTime|GetRuntimeMode|GetSamFwVersion|GetProductInfo|GetRestartReasonExt|GetRestartReason)\\b"
     }
   ]
 }

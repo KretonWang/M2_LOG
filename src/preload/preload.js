@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('m2log', {
   exportLog: (payload) => ipcRenderer.invoke('log:export', payload),
   exportSingleLog: (payload) => ipcRenderer.invoke('log:exportSingle', payload),
   openFolder: (targetPath) => ipcRenderer.invoke('log:openFolder', targetPath),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  openInVSCodeChat: (payload) => ipcRenderer.invoke('vscode:chat', payload),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   latestDownload: () => ipcRenderer.invoke('download:latest'),
   logRoot: () => ipcRenderer.invoke('fs:logRoot'),

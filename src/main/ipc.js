@@ -2,8 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ipcMain, dialog, BrowserWindow, app } = require('electron');
+const { ipcMain, dialog, BrowserWindow, app, shell } = require('electron');
 const { exportLog, exportSingleLog, openFolder } = require('./logwriter');
+const { openInVSCodeChat } = require('./vscodeChat');
 const { defaultOutputDir, appBaseDir } = require('./paths');
 
 /** Register all IPC handlers used by the renderer through the preload bridge. */
@@ -30,6 +31,27 @@ function registerIpc() {
   ipcMain.handle('log:openFolder', async (_evt, targetPath) => {
     try {
       return openFolder(targetPath);
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Open an external https URL in the default browser (author credit link).
+  ipcMain.handle('shell:openExternal', async (_evt, url) => {
+    try {
+      const s = String(url || '');
+      if (!/^https:\/\//i.test(s)) return { ok: false, error: 'Only https URLs allowed' };
+      await shell.openExternal(s);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Open the current LOG in a new VS Code AI (Copilot) chat session.
+  ipcMain.handle('vscode:chat', async (_evt, payload) => {
+    try {
+      return await openInVSCodeChat(payload);
     } catch (err) {
       return { ok: false, error: err.message };
     }

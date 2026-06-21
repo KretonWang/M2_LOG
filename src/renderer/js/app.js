@@ -943,6 +943,13 @@ $('#btnRefreshTime').addEventListener('click', () => {
 $('#btnLang').addEventListener('click', () => {
   loadLang(currentLang === 'zh' ? 'en' : 'zh');
 });
+const creditEl = $('#appCredit');
+if (creditEl) {
+  creditEl.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.m2log.openExternal('https://github.com/oahsiao');
+  });
+}
 $('#btnClearLogs').addEventListener('click', () => {
   const log = logs.find((l) => l.id === activeLogId);
   if (!log) return;
@@ -1014,6 +1021,72 @@ async function anaRenderTree() {
     treeEl.appendChild(anaBuildLevel(res.entries, 0));
   }
   $('#anaCount').textContent = String(res.entries.length);
+  if (anaFilterValue()) anaApplyFilter();
+}
+
+/* ---------- File-tree filter (Type to filter) ---------- */
+let anaFilterTimer = null;
+
+function anaFilterValue() {
+  const inp = document.getElementById('anaFilterInput');
+  return (inp ? inp.value : '').trim().toLowerCase();
+}
+
+// Recursively load every directory node so the filter can match nested files.
+async function anaLoadAllNodes(container) {
+  const nodes = Array.from(container.children).filter((c) => c.classList && c.classList.contains('ana-node'));
+  await Promise.all(
+    nodes.map(async (node) => {
+      if (typeof node._anaLoad === 'function') await node._anaLoad();
+      if (node._anaChildren) await anaLoadAllNodes(node._anaChildren);
+    })
+  );
+}
+
+// Toggle row visibility for a query; returns true if anything inside matched so
+// matching ancestor folders stay visible (and are auto-expanded).
+function anaFilterContainer(container, q) {
+  let any = false;
+  Array.from(container.children).forEach((child) => {
+    if (!child.classList) return;
+    if (child.classList.contains('ana-node')) {
+      const row = child.firstElementChild;
+      const kids = child._anaChildren;
+      const selfMatch = !!row && (row.dataset.name || '').includes(q);
+      const childMatch = kids ? anaFilterContainer(kids, q) : false;
+      const visible = selfMatch || childMatch;
+      child.classList.toggle('ana-hidden', !visible);
+      if (childMatch && kids && row) {
+        kids.hidden = false;
+        row.classList.add('open');
+      }
+      if (visible) any = true;
+    } else if (child.classList.contains('ana-row')) {
+      const match = (child.dataset.name || '').includes(q);
+      child.classList.toggle('ana-hidden', !match);
+      if (match) any = true;
+    } else {
+      // hints / empty placeholders – hide while filtering
+      child.classList.add('ana-hidden');
+    }
+  });
+  return any;
+}
+
+async function anaApplyFilter() {
+  const treeEl = document.getElementById('anaTree');
+  if (!treeEl) return;
+  const q = anaFilterValue();
+  const clearBtn = document.getElementById('anaFilterClear');
+  if (clearBtn) clearBtn.hidden = !q;
+  if (!q) {
+    treeEl.querySelectorAll('.ana-hidden').forEach((el) => el.classList.remove('ana-hidden'));
+    return;
+  }
+  // Load the whole tree once so nested files are searchable, then filter.
+  await anaLoadAllNodes(treeEl);
+  if (anaFilterValue() !== q) return; // query changed while loading
+  anaFilterContainer(treeEl, q);
 }
 
 function anaSort(entries) {
@@ -1042,6 +1115,7 @@ function anaBuildNode(entry, depth) {
   name.className = 'ana-name';
   name.textContent = entry.name;
   row.append(caret, ic, name);
+  row.dataset.name = entry.name.toLowerCase();
 
   if (!entry.isDir) {
     row.addEventListener('click', () => anaViewFile(entry, row));
@@ -1053,28 +1127,39 @@ function anaBuildNode(entry, depth) {
   const children = document.createElement('div');
   children.className = 'ana-children';
   children.hidden = true;
-  let loaded = false;
-  row.addEventListener('click', async () => {
-    if (!children.hidden) {
+  let loadPromise = null;
+  // Load this directory's children once. A shared in-flight promise lets the
+  // file filter drive loading concurrently with a user click.
+  function load() {
+    if (!loadPromise) {
+      loadPromise = (async () => {
+        const res = await window.m2log.listDir(entry.path);
+        children.innerHTML = '';
+        if (res && res.ok && res.entries.length) {
+          children.appendChild(anaBuildLevel(res.entries, depth + 1));
+        } else if (res && res.ok) {
+          children.innerHTML = `<div class="ana-hint" style="padding-left:${8 + (depth + 1) * 16}px">${t('ana.noFiles')}</div>`;
+        } else {
+          children.innerHTML = `<div class="ana-empty">${escapeHtml((res && res.error) || t('ana.loadFail'))}</div>`;
+        }
+      })();
+    }
+    return loadPromise;
+  }
+  async function setOpen(open) {
+    if (open) {
+      await load();
+      children.hidden = false;
+      row.classList.add('open');
+    } else {
       children.hidden = true;
       row.classList.remove('open');
-      return;
     }
-    if (!loaded) {
-      loaded = true;
-      const res = await window.m2log.listDir(entry.path);
-      children.innerHTML = '';
-      if (res && res.ok && res.entries.length) {
-        children.appendChild(anaBuildLevel(res.entries, depth + 1));
-      } else if (res && res.ok) {
-        children.innerHTML = `<div class="ana-hint" style="padding-left:${8 + (depth + 1) * 16}px">${t('ana.noFiles')}</div>`;
-      } else {
-        children.innerHTML = `<div class="ana-empty">${escapeHtml((res && res.error) || t('ana.loadFail'))}</div>`;
-      }
-    }
-    children.hidden = false;
-    row.classList.add('open');
-  });
+  }
+  // Expose to the file-tree filter for programmatic loading/expansion.
+  wrap._anaLoad = load;
+  wrap._anaChildren = children;
+  row.addEventListener('click', () => setOpen(children.hidden));
   wrap.append(row, children);
   return wrap;
 }
@@ -1744,6 +1829,32 @@ $('#btnAnaRefresh').addEventListener('click', anaRenderTree);
 $('#btnAnaOpen').addEventListener('click', () => {
   if (ana.root) window.m2log.openFolder(ana.root);
 });
+(() => {
+  const inp = document.getElementById('anaFilterInput');
+  if (inp) {
+    inp.addEventListener('input', () => {
+      clearTimeout(anaFilterTimer);
+      anaFilterTimer = setTimeout(anaApplyFilter, 120);
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        inp.value = '';
+        anaApplyFilter();
+      }
+    });
+  }
+  const clearBtn = document.getElementById('anaFilterClear');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (inp) {
+        inp.value = '';
+        inp.focus();
+      }
+      anaApplyFilter();
+    });
+  }
+})();
 $('#anaHlSelect').addEventListener('change', async (e) => {
   ana.hl = e.target.value || 'auto';
   if (ana.text == null) return;
@@ -1763,6 +1874,31 @@ $('#btnAnaCopy').addEventListener('click', async () => {
     toast(t('toast.copyOk'), 'success');
   } catch (e) {
     toast(t('toast.copyFail') + e.message, 'error');
+  }
+});
+$('#btnAnaAI').addEventListener('click', async () => {
+  if (ana.text == null) {
+    toast(t('toast.aiNoLog', '請先開啟一個 LOG，再開始 AI 對話'), 'error');
+    return;
+  }
+  const btn = $('#btnAnaAI');
+  btn.disabled = true;
+  toast(t('toast.aiOpening', '正在開啟 VS Code AI 對話…'), 'info');
+  try {
+    const res = await window.m2log.openInVSCodeChat({ name: ana.name, text: ana.text, dir: ana.root });
+    if (res && res.ok) {
+      toast(t('toast.aiOk', '已在 VS Code AI 對話帶入此 LOG'), 'success');
+    } else if (res && res.error === 'VSCODE_NOT_FOUND') {
+      toast(t('toast.aiNoVSCode', '找不到 VS Code，請先安裝並確認 code 已加入 PATH。'), 'error');
+    } else if (res && res.error === 'NO_LOG') {
+      toast(t('toast.aiNoLog', '請先開啟一個 LOG，再開始 AI 對話'), 'error');
+    } else {
+      toast(t('toast.aiFail', '開啟 VS Code 失敗：') + ((res && res.error) || ''), 'error');
+    }
+  } catch (e) {
+    toast(t('toast.aiFail', '開啟 VS Code 失敗：') + e.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
 });
 // Minimap interaction: grab the viewport thumb to drag up/down (scrollbar-style),
