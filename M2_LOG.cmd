@@ -27,7 +27,16 @@ if not exist "node_modules" (
 )
 
 echo [INFO] Starting M2 LOG Tool ...
-call npm start
+set "ELECTRON=node_modules\electron\dist\electron.exe"
+if exist "%ELECTRON%" (
+    REM Launch the Electron GUI exe directly and detached, so the launcher
+    REM console window closes instead of lingering for the app's lifetime.
+    start "" "%ELECTRON%" "%~dp0."
+) else (
+    REM Fallback: electron binary not found yet (e.g. install still settling)
+    REM -- run via npm, which keeps a console window open.
+    call npm start
+)
 endlocal
 exit /b 0
 
