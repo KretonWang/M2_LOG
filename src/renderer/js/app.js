@@ -981,7 +981,22 @@ const ANA_FOLDER_SVG =
 const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 const ANA_HL_KEY = 'm2log_ana_hl';
-const ana = { root: '', hl: localStorage.getItem(ANA_HL_KEY) || 'auto', text: null, name: '', lines: null };
+const ANA_WRAP_KEY = 'm2log_ana_wrap';
+const ANA_FONT_KEY = 'm2log_ana_font';
+const ANA_ROOT_KEY = 'm2log_ana_root';
+const ANA_FILE_KEY = 'm2log_ana_file';
+function clampAnaFont(n) {
+  return Number.isFinite(n) ? Math.min(24, Math.max(9, n)) : 12.5;
+}
+const ana = {
+  root: '',
+  hl: localStorage.getItem(ANA_HL_KEY) || 'auto',
+  text: null,
+  name: '',
+  lines: null,
+  wrap: localStorage.getItem(ANA_WRAP_KEY) !== '0',
+  font: clampAnaFont(parseFloat(localStorage.getItem(ANA_FONT_KEY))),
+};
 const anaNav = { markers: [], targets: [], pos: -1, line: -1, levels: {} };
 // Bookmarks: `lines` points at the active file's set; `store` keeps one set per
 // file path so bookmarks survive switching files and coming back (per session).
@@ -1014,10 +1029,45 @@ function formatBytes(n) {
 async function anaEnsureInit() {
   if (anaReady) return;
   anaReady = true;
+  anaApplyViewPrefs();
   await anaPopulateHl();
-  const r = await window.m2log.logRoot();
-  ana.root = r && r.ok && r.path ? r.path : '';
+  const saved = localStorage.getItem(ANA_ROOT_KEY);
+  if (saved) {
+    ana.root = saved;
+  } else {
+    const r = await window.m2log.logRoot();
+    ana.root = r && r.ok && r.path ? r.path : '';
+  }
   await anaRenderTree();
+  // Best-effort: restore the last opened file's content.
+  const savedFile = localStorage.getItem(ANA_FILE_KEY);
+  if (savedFile) {
+    anaViewFile({ name: savedFile.split(/[\\/]/).pop(), path: savedFile }, null);
+  }
+}
+
+// Apply persisted viewer preferences (word-wrap + font size) and reflect the
+// wrap state on its toolbar toggle.
+function anaApplyViewPrefs() {
+  const el = document.getElementById('anaViewContent');
+  if (el) {
+    el.classList.toggle('nowrap', !ana.wrap);
+    el.style.fontSize = ana.font + 'px';
+  }
+  const wrapBtn = document.getElementById('btnAnaWrap');
+  if (wrapBtn) wrapBtn.classList.toggle('on', ana.wrap);
+}
+
+function anaToggleWrap() {
+  ana.wrap = !ana.wrap;
+  localStorage.setItem(ANA_WRAP_KEY, ana.wrap ? '1' : '0');
+  anaApplyViewPrefs();
+}
+
+function anaSetFont(px) {
+  ana.font = clampAnaFont(px);
+  localStorage.setItem(ANA_FONT_KEY, String(ana.font));
+  anaApplyViewPrefs();
 }
 
 async function anaRenderTree() {
@@ -1044,6 +1094,7 @@ async function anaRenderTree() {
 
 /* ---------- File-tree filter (Type to filter) ---------- */
 let anaFilterTimer = null;
+let anaFilterActiveEl = null;
 
 function anaFilterValue() {
   const inp = document.getElementById('anaFilterInput');
@@ -1079,11 +1130,13 @@ function anaFilterContainer(container, q, stats) {
         kids.hidden = false;
         row.classList.add('open');
       }
+      if (row) anaSetNameHtml(row, selfMatch ? q : '');
       if (selfMatch && stats) stats.n += 1;
       if (visible) any = true;
     } else if (child.classList.contains('ana-row')) {
       const match = (child.dataset.name || '').includes(q);
       child.classList.toggle('ana-hidden', !match);
+      anaSetNameHtml(child, match ? q : '');
       if (match) {
         any = true;
         if (stats) stats.n += 1;
@@ -1122,6 +1175,10 @@ async function anaApplyFilter() {
   const countEl = document.getElementById('anaCount');
   if (!q) {
     treeEl.querySelectorAll('.ana-hidden').forEach((el) => el.classList.remove('ana-hidden'));
+    treeEl.querySelectorAll('.ana-name').forEach((n) => {
+      n.textContent = n.textContent;
+    });
+    anaFilterSetActive(null);
     anaFilterSetEmpty(false);
     if (countEl && treeEl.dataset.total != null) countEl.textContent = treeEl.dataset.total;
     return;
@@ -1134,6 +1191,60 @@ async function anaApplyFilter() {
   anaFilterContainer(treeEl, q, stats);
   if (countEl) countEl.textContent = `${stats.n}/${treeEl.dataset.total || '?'}`;
   anaFilterSetEmpty(stats.n === 0);
+}
+
+// Highlight the matched substring within a tree row's name (or restore plain
+// text when q is empty / no match). textContent always yields the raw name even
+// after a previous highlight, so re-highlighting stays clean.
+function anaSetNameHtml(row, q) {
+  const nameEl = row && row.querySelector('.ana-name');
+  if (!nameEl) return;
+  const raw = nameEl.textContent;
+  if (!q) {
+    nameEl.textContent = raw;
+    return;
+  }
+  const at = raw.toLowerCase().indexOf(q);
+  if (at < 0) {
+    nameEl.textContent = raw;
+    return;
+  }
+  nameEl.innerHTML =
+    escapeHtml(raw.slice(0, at)) +
+    '<mark class="ana-fmark">' +
+    escapeHtml(raw.slice(at, at + q.length)) +
+    '</mark>' +
+    escapeHtml(raw.slice(at + q.length));
+}
+
+// Currently visible file rows, in document order, for filter keyboard nav.
+function anaVisibleFileRows() {
+  const treeEl = document.getElementById('anaTree');
+  if (!treeEl) return [];
+  return Array.from(treeEl.querySelectorAll('.ana-row.is-file')).filter((r) => r.offsetParent !== null);
+}
+
+function anaFilterSetActive(el) {
+  if (anaFilterActiveEl && anaFilterActiveEl !== el) anaFilterActiveEl.classList.remove('kbd-active');
+  anaFilterActiveEl = el || null;
+  if (anaFilterActiveEl) {
+    anaFilterActiveEl.classList.add('kbd-active');
+    anaFilterActiveEl.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function anaFilterMove(dir) {
+  const rows = anaVisibleFileRows();
+  if (!rows.length) return;
+  let idx = anaFilterActiveEl ? rows.indexOf(anaFilterActiveEl) : -1;
+  idx = idx < 0 ? (dir > 0 ? 0 : rows.length - 1) : idx + dir;
+  if (idx < 0) idx = rows.length - 1;
+  if (idx >= rows.length) idx = 0;
+  anaFilterSetActive(rows[idx]);
+}
+
+function anaFilterOpenActive() {
+  if (anaFilterActiveEl) anaFilterActiveEl.click();
 }
 
 function anaSort(entries) {
@@ -1257,6 +1368,11 @@ async function anaViewFile(entry, row) {
   if (res.truncated) text += `\n\n... [${t('ana.truncated')}]`;
   ana.text = text;
   ana.lines = null;
+  try {
+    localStorage.setItem(ANA_FILE_KEY, entry.path);
+  } catch (e) {
+    /* ignore */
+  }
   anaInvalidateRulesCache();
   const rules = await anaResolveRules(entry.name);
   anaRenderContent(text, rules);
@@ -1866,12 +1982,14 @@ $('#btnAnaBrowse').addEventListener('click', async () => {
   const r = await window.m2log.pickFolder();
   if (r && r.ok && r.path) {
     ana.root = r.path;
+    localStorage.setItem(ANA_ROOT_KEY, ana.root);
     await anaRenderTree();
   }
 });
 $('#btnAnaReset').addEventListener('click', async () => {
   const r = await window.m2log.logRoot();
   if (r && r.ok && r.path) ana.root = r.path;
+  localStorage.setItem(ANA_ROOT_KEY, ana.root);
   await anaRenderTree();
 });
 $('#btnAnaRefresh').addEventListener('click', anaRenderTree);
@@ -1883,13 +2001,22 @@ $('#btnAnaOpen').addEventListener('click', () => {
   if (inp) {
     inp.addEventListener('input', () => {
       clearTimeout(anaFilterTimer);
-      anaFilterTimer = setTimeout(anaApplyFilter, 120);
+      anaFilterTimer = setTimeout(() => {
+        anaFilterSetActive(null);
+        anaApplyFilter();
+      }, 120);
     });
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         inp.value = '';
         anaApplyFilter();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        anaFilterMove(e.key === 'ArrowDown' ? 1 : -1);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        anaFilterOpenActive();
       }
     });
   }
@@ -1903,7 +2030,30 @@ $('#btnAnaOpen').addEventListener('click', () => {
       anaApplyFilter();
     });
   }
+  // Viewer preference controls (word-wrap toggle + font zoom).
+  const wrapBtn = document.getElementById('btnAnaWrap');
+  if (wrapBtn) wrapBtn.addEventListener('click', anaToggleWrap);
+  const zin = document.getElementById('btnAnaZoomIn');
+  if (zin) zin.addEventListener('click', () => anaSetFont(ana.font + 1));
+  const zout = document.getElementById('btnAnaZoomOut');
+  if (zout) zout.addEventListener('click', () => anaSetFont(ana.font - 1));
 })();
+// Ctrl +/-/0 zooms the viewer font while the analysis view is active.
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const av = document.getElementById('view-analysis');
+  if (!av || !av.classList.contains('active')) return;
+  if (e.key === '=' || e.key === '+') {
+    e.preventDefault();
+    anaSetFont(ana.font + 1);
+  } else if (e.key === '-' || e.key === '_') {
+    e.preventDefault();
+    anaSetFont(ana.font - 1);
+  } else if (e.key === '0') {
+    e.preventDefault();
+    anaSetFont(12.5);
+  }
+});
 $('#anaHlSelect').addEventListener('change', async (e) => {
   ana.hl = e.target.value || 'auto';
   localStorage.setItem(ANA_HL_KEY, ana.hl);

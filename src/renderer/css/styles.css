@@ -840,6 +840,26 @@ input[type="date"] {
   display: none !important;
 }
 
+/* Highlight the matched substring in filtered file/folder names. */
+.ana-fmark {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+/* Keyboard-navigated filter result. */
+.ana-row.kbd-active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -1px;
+}
+
+/* Active state for the viewer word-wrap toggle. */
+#btnAnaWrap.on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .ana-row {
   display: flex;
   align-items: center;
@@ -1206,6 +1226,25 @@ body.ana-ruler-dragging .ana-ruler-view {
   padding-right: 16px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Word-wrap toggle: nowrap mode lets long lines extend with horizontal scroll. */
+.ana-code.nowrap {
+  width: max-content;
+  min-width: 100%;
+}
+.ana-code.nowrap .ana-lc {
+  white-space: pre;
+}
+.ana-code.nowrap .ana-line {
+  min-width: 100%;
+}
+.ana-scroll:has(.ana-code.nowrap)::-webkit-scrollbar {
+  height: 9px;
+}
+.ana-scroll:has(.ana-code.nowrap)::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 5px;
 }
 
 .hl-error {
