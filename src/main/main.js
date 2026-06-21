@@ -22,6 +22,7 @@ function createWindow() {
     minHeight: 600,
     show: false,
     title: 'M2 LOG Tool',
+    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true,
