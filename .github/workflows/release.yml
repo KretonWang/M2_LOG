@@ -44,7 +44,10 @@ jobs:
         run: npm ci
 
       - name: Build Windows installer (electron-builder NSIS)
-        run: npm run dist
+        # --publish never: only build locally; the "Publish GitHub Release" step
+        # below uploads the artifact. Without this, electron-builder auto-detects
+        # the tag and tries to publish itself, failing because GH_TOKEN isn't set.
+        run: npm run dist -- --publish never
 
       - name: List artifacts
         shell: pwsh
