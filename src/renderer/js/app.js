@@ -980,7 +980,8 @@ const ANA_FOLDER_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-const ana = { root: '', hl: 'auto', text: null, name: '' };
+const ANA_HL_KEY = 'm2log_ana_hl';
+const ana = { root: '', hl: localStorage.getItem(ANA_HL_KEY) || 'auto', text: null, name: '', lines: null };
 const anaNav = { markers: [], targets: [], pos: -1, line: -1, levels: {} };
 // Bookmarks: `lines` points at the active file's set; `store` keeps one set per
 // file path so bookmarks survive switching files and coming back (per session).
@@ -994,6 +995,14 @@ const anaFindSupported =
 // term {text, level} compiles into a render rule (colours text + adds a nav chip).
 const anaMark = { terms: [], path: '', store: new Map(), seq: 0 };
 let anaReady = false;
+
+// Cache the current file split into lines so search / re-highlight don't re-split
+// the (potentially multi-MB) text on every keystroke. Invalidated (set to null)
+// whenever ana.text changes.
+function anaGetLines() {
+  if (ana.lines == null) ana.lines = ana.text == null ? [] : String(ana.text).split(/\r\n|\r|\n/);
+  return ana.lines;
+}
 
 function formatBytes(n) {
   n = Number(n) || 0;
@@ -1028,6 +1037,7 @@ async function anaRenderTree() {
   } else {
     treeEl.appendChild(anaBuildLevel(res.entries, 0));
   }
+  treeEl.dataset.total = String(res.entries.length);
   $('#anaCount').textContent = String(res.entries.length);
   if (anaFilterValue()) anaApplyFilter();
 }
@@ -1052,27 +1062,32 @@ async function anaLoadAllNodes(container) {
 }
 
 // Toggle row visibility for a query; returns true if anything inside matched so
-// matching ancestor folders stay visible (and are auto-expanded).
-function anaFilterContainer(container, q) {
+// matching ancestor folders stay visible (and are auto-expanded). `stats.n`
+// accumulates the number of matched entries for the result counter.
+function anaFilterContainer(container, q, stats) {
   let any = false;
   Array.from(container.children).forEach((child) => {
-    if (!child.classList) return;
+    if (!child.classList || child.classList.contains('ana-filter-empty')) return;
     if (child.classList.contains('ana-node')) {
       const row = child.firstElementChild;
       const kids = child._anaChildren;
       const selfMatch = !!row && (row.dataset.name || '').includes(q);
-      const childMatch = kids ? anaFilterContainer(kids, q) : false;
+      const childMatch = kids ? anaFilterContainer(kids, q, stats) : false;
       const visible = selfMatch || childMatch;
       child.classList.toggle('ana-hidden', !visible);
       if (childMatch && kids && row) {
         kids.hidden = false;
         row.classList.add('open');
       }
+      if (selfMatch && stats) stats.n += 1;
       if (visible) any = true;
     } else if (child.classList.contains('ana-row')) {
       const match = (child.dataset.name || '').includes(q);
       child.classList.toggle('ana-hidden', !match);
-      if (match) any = true;
+      if (match) {
+        any = true;
+        if (stats) stats.n += 1;
+      }
     } else {
       // hints / empty placeholders – hide while filtering
       child.classList.add('ana-hidden');
@@ -1081,20 +1096,44 @@ function anaFilterContainer(container, q) {
   return any;
 }
 
+// Show/clear the "no matches" placeholder inside the file tree.
+function anaFilterSetEmpty(show) {
+  const treeEl = document.getElementById('anaTree');
+  if (!treeEl) return;
+  let empty = treeEl.querySelector('.ana-filter-empty');
+  if (show) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'ana-empty ana-filter-empty';
+      treeEl.appendChild(empty);
+    }
+    empty.textContent = t('ana.filter.none', '無相符項目');
+  } else if (empty) {
+    empty.remove();
+  }
+}
+
 async function anaApplyFilter() {
   const treeEl = document.getElementById('anaTree');
   if (!treeEl) return;
   const q = anaFilterValue();
   const clearBtn = document.getElementById('anaFilterClear');
   if (clearBtn) clearBtn.hidden = !q;
+  const countEl = document.getElementById('anaCount');
   if (!q) {
     treeEl.querySelectorAll('.ana-hidden').forEach((el) => el.classList.remove('ana-hidden'));
+    anaFilterSetEmpty(false);
+    if (countEl && treeEl.dataset.total != null) countEl.textContent = treeEl.dataset.total;
     return;
   }
   // Load the whole tree once so nested files are searchable, then filter.
   await anaLoadAllNodes(treeEl);
   if (anaFilterValue() !== q) return; // query changed while loading
-  anaFilterContainer(treeEl, q);
+  anaFilterSetEmpty(false); // drop any stale placeholder before recounting
+  const stats = { n: 0 };
+  anaFilterContainer(treeEl, q, stats);
+  if (countEl) countEl.textContent = `${stats.n}/${treeEl.dataset.total || '?'}`;
+  anaFilterSetEmpty(stats.n === 0);
 }
 
 function anaSort(entries) {
@@ -1207,6 +1246,7 @@ async function anaViewFile(entry, row) {
   anaMark.terms = mkArr;
   ana.name = entry.name;
   ana.text = null;
+  ana.lines = null;
   content.textContent = t('ana.loading');
   const res = await window.m2log.readText(entry.path);
   if (!res || !res.ok) {
@@ -1216,6 +1256,7 @@ async function anaViewFile(entry, row) {
   let text = res.content;
   if (res.truncated) text += `\n\n... [${t('ana.truncated')}]`;
   ana.text = text;
+  ana.lines = null;
   anaInvalidateRulesCache();
   const rules = await anaResolveRules(entry.name);
   anaRenderContent(text, rules);
@@ -1364,7 +1405,7 @@ function anaRenderContent(text, rules) {
   // and contribute nav chips alongside the built-in levels.
   const baseCompiled = rules && rules.compiled ? rules.compiled : [];
   rules = { compiled: baseCompiled.concat(anaMarkCompiled()) };
-  const lines = String(text).split(/\r\n|\r|\n/);
+  const lines = text === ana.text ? anaGetLines() : String(text).split(/\r\n|\r|\n/);
   const markers = [];
   let html = '';
   for (let i = 0; i < lines.length; i += 1) {
@@ -1865,6 +1906,7 @@ $('#btnAnaOpen').addEventListener('click', () => {
 })();
 $('#anaHlSelect').addEventListener('change', async (e) => {
   ana.hl = e.target.value || 'auto';
+  localStorage.setItem(ANA_HL_KEY, ana.hl);
   if (ana.text == null) return;
   const rules = await anaResolveRules(ana.name);
   anaRenderContent(ana.text, rules);
@@ -1968,10 +2010,20 @@ $('#anaRuler').addEventListener('mousedown', (e) => {
   document.addEventListener('mouseup', onUp);
   document.body.classList.add('ana-ruler-dragging');
 });
-if (document.getElementById('anaScroll')) {
-  document.getElementById('anaScroll').addEventListener('scroll', anaUpdateRuler);
+// Coalesce the high-frequency scroll/resize minimap refresh into one update per
+// animation frame so dragging the scrollbar on a large log stays smooth.
+let anaRulerRaf = 0;
+function anaUpdateRulerThrottled() {
+  if (anaRulerRaf) return;
+  anaRulerRaf = requestAnimationFrame(() => {
+    anaRulerRaf = 0;
+    anaUpdateRuler();
+  });
 }
-window.addEventListener('resize', anaUpdateRuler);
+if (document.getElementById('anaScroll')) {
+  document.getElementById('anaScroll').addEventListener('scroll', anaUpdateRulerThrottled, { passive: true });
+}
+window.addEventListener('resize', anaUpdateRulerThrottled);
 $('#btnAnaPrev').addEventListener('click', () => anaNavGo(-1));
 $('#btnAnaNext').addEventListener('click', () => anaNavGo(1));
 $('#chipBm').addEventListener('click', () => anaBmGo(1));
@@ -2160,7 +2212,7 @@ function anaFindCompute(query) {
   if (!query || ana.text == null) return matches;
   const needle = query.toLowerCase();
   const nlen = needle.length;
-  const lines = String(ana.text).split(/\r\n|\r|\n/);
+  const lines = anaGetLines();
   const CAP = 5000;
   for (let i = 0; i < lines.length; i += 1) {
     const hay = lines[i].toLowerCase();

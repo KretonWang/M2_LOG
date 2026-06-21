@@ -64,6 +64,7 @@
   "ana.files": "Files",
   "ana.filter.ph": "Type to filter…",
   "ana.filter.clear": "Clear filter",
+  "ana.filter.none": "No matches",
   "ana.viewer": "Viewer",
   "ana.highlight": "Highlight",
   "ana.hl.auto": "Auto",

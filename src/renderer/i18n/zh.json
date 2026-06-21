@@ -64,6 +64,7 @@
   "ana.files": "檔案",
   "ana.filter.ph": "輸入以篩選…",
   "ana.filter.clear": "清除篩選",
+  "ana.filter.none": "無相符項目",
   "ana.viewer": "檢視",
   "ana.highlight": "標記",
   "ana.hl.auto": "自動",
