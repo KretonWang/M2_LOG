@@ -105,12 +105,9 @@ body {
 .logo {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
   display: grid;
   place-items: center;
   color: #facc15;
-  background: #20283a;
-  box-shadow: 0 4px 14px rgba(250, 204, 21, 0.35);
 }
 
 .brand-text h1 {
