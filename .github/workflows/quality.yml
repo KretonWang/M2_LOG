@@ -1,0 +1,92 @@
+name: Quality
+
+# Fast code-quality gate on every push / PR. Zero extra dependencies: only
+# Node built-ins + PowerShell, so it never blocks on a flaky npm install.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # Run the v4 JS actions on Node 24 (they ship for Node 20, which GitHub is retiring).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  code-quality:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: JS / MJS syntax check (node --check)
+        shell: pwsh
+        run: |
+          $files = @()
+          $files += Get-ChildItem -Recurse -Filter *.js  -Path src | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem -Recurse -Filter *.mjs -Path scripts | Select-Object -ExpandProperty FullName
+          $fail = $false
+          foreach ($f in $files) {
+            node --check $f
+            if ($LASTEXITCODE -ne 0) { Write-Host "SYNTAX FAIL: $f"; $fail = $true }
+          }
+          if ($fail) { exit 1 }
+          Write-Host "Syntax OK ($($files.Count) files)"
+
+      - name: JSON is valid (package.json + i18n + highlight)
+        shell: pwsh
+        run: |
+          $jsons = @('package.json')
+          $jsons += Get-ChildItem -Recurse -Filter *.json -Path src/renderer/i18n | Select-Object -ExpandProperty FullName
+          $jsons += Get-ChildItem -Filter *.json -Path highlight | Select-Object -ExpandProperty FullName
+          $fail = $false
+          foreach ($j in $jsons) {
+            try { Get-Content $j -Raw | ConvertFrom-Json | Out-Null; Write-Host "JSON OK: $j" }
+            catch { Write-Host "JSON INVALID: $j -> $_"; $fail = $true }
+          }
+          if ($fail) { exit 1 }
+
+      - name: ASCII-only guard (encoding-sensitive files)
+        shell: pwsh
+        run: |
+          # These files have repeatedly broken cmd / NSIS / YAML parsing when they
+          # picked up literal non-ASCII bytes. Keep them pure ASCII.
+          $targets = @('M2_LOG.cmd')
+          $targets += Get-ChildItem .github/workflows -Filter *.yml | Select-Object -ExpandProperty FullName
+          $fail = $false
+          foreach ($t in $targets) {
+            if (-not (Test-Path $t)) { continue }
+            $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $t).Path)
+            $bad = @($bytes | Where-Object { $_ -gt 127 })
+            if ($bad.Count) { Write-Host "NON-ASCII ($($bad.Count) bytes): $t"; $fail = $true }
+            else { Write-Host "ASCII OK: $t" }
+          }
+          if ($fail) { exit 1 }
+
+      - name: No leftover debugger statements
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Recurse -Filter *.js -Path src | Select-Object -ExpandProperty FullName
+          $hits = Select-String -Path $files -Pattern '(^|\s)debugger\s*;' -ErrorAction SilentlyContinue
+          if ($hits) {
+            Write-Host "Found debugger statement(s):"
+            $hits | ForEach-Object { Write-Host ("  {0}:{1}" -f $_.Path, $_.LineNumber) }
+            exit 1
+          }
+          Write-Host "No debugger statements"
+
+      - name: Icon generator runs (and emits png + ico)
+        shell: pwsh
+        run: |
+          node scripts/make-icon.mjs
+          foreach ($f in @('src/assets/icon.png', 'build/icon.png', 'build/icon.ico')) {
+            if (-not (Test-Path $f) -or (Get-Item $f).Length -lt 1024) { Write-Host "ICON MISSING/SMALL: $f"; exit 1 }
+            Write-Host ("ICON OK: {0} ({1} bytes)" -f $f, (Get-Item $f).Length)
+          }

@@ -1,0 +1,69 @@
+name: Build
+
+# Package the Windows app on every push / PR as a sanity check (publishes
+# nothing). Proves it still builds and that the highlight rules ship with it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # electron-builder downloads a ~110 MB Electron binary; cache it between runs.
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (electron-builder --dir)
+        run: npm run pack
+
+      - name: Verify packaged layout
+        shell: pwsh
+        run: |
+          $root = "dist/win-unpacked"
+          $required = @(
+            "M2_LOG.exe",
+            "resources/app.asar",
+            "highlight/SAM.json",
+            "highlight/UEFI.json"
+          )
+          $fail = $false
+          foreach ($r in $required) {
+            if (-not (Test-Path (Join-Path $root $r))) { Write-Host "MISSING: $r"; $fail = $true }
+            else { Write-Host "OK: $r" }
+          }
+          if ($fail) { exit 1 }
+          Write-Host "Layout OK: M2_LOG.exe + app.asar + highlight rules present"
+
+      - name: Upload unpacked build
+        uses: actions/upload-artifact@v4
+        with:
+          name: M2_LOG-win-unpacked
+          path: dist/win-unpacked
+          retention-days: 14

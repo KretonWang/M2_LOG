@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "icon": "node scripts/make-icon.mjs",
+    "test": "node --test test/selftest.test.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -29,7 +30,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Keep npm dependencies (electron, electron-builder, archiver) up to date.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Keep the GitHub Actions (checkout, setup-node, cache, codeql, ...) up to date.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

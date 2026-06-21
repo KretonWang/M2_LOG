@@ -1,0 +1,27 @@
+name: Self-Test
+
+# Static feature guards on every push / PR: i18n key parity, data-i18n coverage,
+# highlight regex validity, and duplicate element ids. Pure static analysis
+# (no Electron, no DOM, no npm install), so it finishes in seconds.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run feature self-tests
+        run: node --test test/selftest.test.js

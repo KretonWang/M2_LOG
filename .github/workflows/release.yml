@@ -1,0 +1,63 @@
+name: Release
+
+# Publish a Windows installer when a version tag is pushed, e.g.:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+# Builds the NSIS installer with electron-builder and attaches it to a GitHub
+# Release created for the tag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer (electron-builder NSIS)
+        run: npm run dist
+
+      - name: List artifacts
+        shell: pwsh
+        run: Get-ChildItem dist -File | Select-Object Name, @{ n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } }
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $setup = Get-ChildItem dist -Filter '*Setup*.exe' | Select-Object -First 1
+          if (-not $setup) { $setup = Get-ChildItem dist -Filter '*.exe' | Select-Object -First 1 }
+          if (-not $setup) { Write-Host "No installer .exe found in dist/"; exit 1 }
+          $tag = $env:GITHUB_REF_NAME
+          $notes = "Automated Windows x64 installer for M2_LOG $tag.`n`nRun the Setup .exe and follow the interactive installer."
+          gh release create $tag $setup.FullName --title "M2_LOG $tag" --notes $notes
