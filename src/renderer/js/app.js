@@ -1042,7 +1042,7 @@ async function anaEnsureInit() {
   // Best-effort: restore the last opened file's content.
   const savedFile = localStorage.getItem(ANA_FILE_KEY);
   if (savedFile) {
-    anaViewFile({ name: savedFile.split(/[\\/]/).pop(), path: savedFile }, null);
+    anaOpenTab({ name: savedFile.split(/[\\/]/).pop(), path: savedFile }, null);
   }
 }
 
@@ -1276,7 +1276,8 @@ function anaBuildNode(entry, depth) {
   row.dataset.name = entry.name.toLowerCase();
 
   if (!entry.isDir) {
-    row.addEventListener('click', () => anaViewFile(entry, row));
+    row.dataset.path = entry.path;
+    row.addEventListener('click', () => anaOpenTab(entry, row));
     return row;
   }
 
@@ -1321,6 +1322,172 @@ function anaBuildNode(entry, depth) {
   wrap.append(row, children);
   return wrap;
 }
+
+/* ---------- Viewer tabs (open multiple LOG files) ---------- */
+// Each tab is one opened file {path, name}. Tabs reuse anaViewFile to render;
+// per-file bookmarks/marks already survive because their stores are keyed by path.
+const anaTabs = [];
+let anaActiveTab = '';
+let anaTabCtxPath = '';
+
+function anaFindRowByPath(path) {
+  const tree = document.getElementById('anaTree');
+  if (!tree) return null;
+  const sel = window.CSS && CSS.escape ? CSS.escape(path) : path;
+  return tree.querySelector(`.ana-row.is-file[data-path="${sel}"]`);
+}
+
+function anaRenderTabs() {
+  const host = document.getElementById('anaTabs');
+  if (!host) return;
+  host.classList.toggle('empty', anaTabs.length === 0);
+  host.innerHTML = '';
+  anaTabs.forEach((tb) => {
+    const el = document.createElement('div');
+    el.className = 'ana-tab' + (tb.path === anaActiveTab ? ' active' : '');
+    el.dataset.path = tb.path;
+    el.title = tb.path;
+    const name = document.createElement('span');
+    name.className = 'ana-tab-name';
+    name.textContent = tb.name;
+    const close = document.createElement('span');
+    close.className = 'ana-tab-close';
+    close.textContent = '\u00d7';
+    close.title = t('ana.tab.close', '關閉');
+    el.append(name, close);
+    host.appendChild(el);
+  });
+}
+
+// Open a file in a tab (creating it if needed) and make it active.
+function anaOpenTab(entry, row) {
+  if (!anaTabs.some((tb) => tb.path === entry.path)) {
+    anaTabs.push({ path: entry.path, name: entry.name });
+  }
+  anaActiveTab = entry.path;
+  anaRenderTabs();
+  anaViewFile(entry, row || anaFindRowByPath(entry.path));
+}
+
+// Switch the viewer to an already-open tab.
+function anaActivateTab(path) {
+  if (path === anaActiveTab) return;
+  const tb = anaTabs.find((x) => x.path === path);
+  if (!tb) return;
+  anaActiveTab = path;
+  anaRenderTabs();
+  anaViewFile({ name: tb.name, path: tb.path }, anaFindRowByPath(path));
+}
+
+function anaCloseTab(path) {
+  const idx = anaTabs.findIndex((tb) => tb.path === path);
+  if (idx < 0) return;
+  const wasActive = anaActiveTab === path;
+  anaTabs.splice(idx, 1);
+  if (wasActive) {
+    if (anaTabs.length) {
+      const next = anaTabs[Math.min(idx, anaTabs.length - 1)];
+      anaActiveTab = next.path;
+      anaRenderTabs();
+      anaViewFile({ name: next.name, path: next.path }, anaFindRowByPath(next.path));
+    } else {
+      anaActiveTab = '';
+      anaRenderTabs();
+      anaClearViewer();
+    }
+  } else {
+    anaRenderTabs();
+  }
+}
+
+function anaCloseOtherTabs(path) {
+  const keep = anaTabs.find((tb) => tb.path === path);
+  if (!keep) return;
+  anaTabs.length = 0;
+  anaTabs.push(keep);
+  if (anaActiveTab !== path) {
+    anaActiveTab = path;
+    anaRenderTabs();
+    anaViewFile({ name: keep.name, path: keep.path }, anaFindRowByPath(path));
+  } else {
+    anaRenderTabs();
+  }
+}
+
+async function anaCopyTabPath(path) {
+  try {
+    await navigator.clipboard.writeText(path);
+    toast(t('ana.tab.copied', '已複製路徑'), 'success');
+  } catch (e) {
+    toast(t('ana.tab.copyFail', '複製失敗'), 'error');
+  }
+}
+
+// Reset the viewer to an empty state (used when the last tab is closed).
+function anaClearViewer() {
+  ana.text = null;
+  ana.lines = null;
+  ana.name = '';
+  const content = document.getElementById('anaViewContent');
+  if (content) content.textContent = '';
+  const nameEl = document.getElementById('anaViewName');
+  if (nameEl) nameEl.textContent = t('ana.viewer', '檢視');
+  const metaEl = document.getElementById('anaViewMeta');
+  if (metaEl) metaEl.textContent = '';
+  const lvHost = document.getElementById('anaLevels');
+  if (lvHost) lvHost.innerHTML = '';
+  const ruler = document.getElementById('anaRuler');
+  if (ruler) ruler.hidden = true;
+  anaNav.markers = [];
+  anaNav.line = -1;
+  anaNavRebuild();
+  anaFindClose();
+  document.querySelectorAll('#anaTree .ana-row.selected').forEach((r) => r.classList.remove('selected'));
+  try {
+    localStorage.removeItem(ANA_FILE_KEY);
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+// Tab strip interactions: click to activate, click ✕ / middle-click to close,
+// right-click for the close / copy-path menu.
+(() => {
+  const host = document.getElementById('anaTabs');
+  if (!host) return;
+  host.addEventListener('click', (e) => {
+    const tabEl = e.target.closest('.ana-tab');
+    if (!tabEl) return;
+    const path = tabEl.dataset.path;
+    if (e.target.closest('.ana-tab-close')) {
+      anaCloseTab(path);
+      return;
+    }
+    anaActivateTab(path);
+  });
+  host.addEventListener('auxclick', (e) => {
+    if (e.button !== 1) return;
+    const tabEl = e.target.closest('.ana-tab');
+    if (!tabEl) return;
+    e.preventDefault();
+    anaCloseTab(tabEl.dataset.path);
+  });
+  host.addEventListener('contextmenu', (e) => {
+    const tabEl = e.target.closest('.ana-tab');
+    if (!tabEl) return;
+    e.preventDefault();
+    anaTabCtxPath = tabEl.dataset.path;
+    const items = [
+      { act: 'tabclose', label: t('ana.tab.close', '關閉') },
+      { act: 'tabcopy', label: t('ana.tab.copyPath', '複製檔案路徑') },
+    ];
+    if (anaTabs.length > 1) {
+      items.push({ sep: true });
+      items.push({ act: 'tabcloseothers', label: t('ana.tab.closeOthers', '關閉其他') });
+    }
+    anaCtxShow(e.clientX, e.clientY, items);
+  });
+})();
 
 async function anaViewFile(entry, row) {
   document.querySelectorAll('#anaTree .ana-row.selected').forEach((r) => r.classList.remove('selected'));
@@ -2261,6 +2428,9 @@ if (document.getElementById('anaCtx')) {
     if (act === 'add') anaMarkAdd(anaCtxSel);
     else if (act === 'rm') anaMarkRemove(anaCtxLevel);
     else if (act === 'clear') anaMarkClear();
+    else if (act === 'tabclose') anaCloseTab(anaTabCtxPath);
+    else if (act === 'tabcopy') anaCopyTabPath(anaTabCtxPath);
+    else if (act === 'tabcloseothers') anaCloseOtherTabs(anaTabCtxPath);
   });
 }
 document.addEventListener('mousedown', (e) => {
