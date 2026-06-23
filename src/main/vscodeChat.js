@@ -84,15 +84,6 @@ function sanitizeFileName(name) {
   return s.slice(0, 120);
 }
 
-// Sanitize a LOG name for safe inclusion in the shell command line (the prompt).
-// Allows only an alphanumeric/space/._- whitelist, so there is no quoting or
-// injection surface even though the command is launched via cmd.exe (shell:true).
-function sanitizeForPrompt(name) {
-  const s = String(name == null ? '' : name).replace(/[^A-Za-z0-9 ._-]+/g, '_').trim();
-  return (s || 'log').slice(0, 120);
-}
-
-
 // Build the context document attached to the chat: a short header naming the
 // LOG, followed by its full content verbatim.
 function buildLogChatContext(name, text) {
@@ -106,16 +97,17 @@ function buildLogChatContext(name, text) {
   return header + String(text == null ? '' : text);
 }
 
-// Open a VS Code chat session preloaded with the LOG as an attached file and
-// kick it off with an English analysis prompt that names the LOG (so the chat
-// title is seeded from the file name). We REUSE the running VS Code window (`-r`)
+// Open a VS Code chat session preloaded with the LOG as an attached file, with
+// the input box LEFT EMPTY so nothing is auto-submitted - the user types their
+// own prompt and presses Enter. We REUSE the running VS Code window (`-r`)
 // instead of forcing a new empty one (`-n`): a brand-new window is not ready in
-// time, so the chat request and `--add-file` attachment get dropped. We also do
-// NOT pass `-m agent`: relying on the CLI default matches the form proven to
-// attach reliably. The prompt is ASCII-only because cmd.exe (shell:true, needed
-// for the code.cmd shim) mangles non-ASCII argv into '?'. Every command-line
-// token is either trusted/whitelisted or our crypto-random temp path, so there
-// is no shell-injection surface. The LOG text only ever lives in the temp file.
+// time, so the chat request and `--add-file` attachment get dropped. We pass NO
+// prompt (so the AI does not start on its own) plus `--maximize`, which is what
+// actually forces the chat view open for an empty query - without it a
+// prompt-less `code chat` is a silent no-op. Every command-line token is either
+// trusted/whitelisted or our crypto-random temp path, so there is no
+// shell-injection surface despite shell:true (needed for the code.cmd shim on
+// Windows). The LOG text only ever lives in the temp file.
 async function openInVSCodeChat(payload) {
   const { name, text, dir } = payload || {};
   if (text == null || String(text) === '') {
@@ -128,7 +120,7 @@ async function openInVSCodeChat(payload) {
   sweepStaleChatTemps();
 
   // Write the context into a per-session temp folder, with the file named after
-  // the real LOG so the attachment chip + chat title reflect the actual name.
+  // the real LOG so the attachment chip shows the actual name.
   const context = buildLogChatContext(name, text);
   const sessionDir = path.join(os.tmpdir(), `m2log-chat-${crypto.randomBytes(8).toString('hex')}`);
   const tmpFile = path.join(sessionDir, sanitizeFileName(name));
@@ -140,9 +132,6 @@ async function openInVSCodeChat(payload) {
   }
 
   const cwd = dir && fs.existsSync(dir) ? dir : undefined;
-  const prompt =
-    `Analyze the LOG file '${sanitizeForPrompt(name)}': identify errors, warnings, ` +
-    'abnormal timestamps and ordering, and infer the likely root cause.';
 
   return await new Promise((resolve) => {
     let child;
@@ -155,11 +144,11 @@ async function openInVSCodeChat(payload) {
       resolve(res);
     };
 
-    // Matches the proven-working form: `code chat -r --add-file <file> "<prompt>"`.
-    // Only the trusted resolved code path, our temp path, and a whitelisted
-    // prompt are interpolated - no raw user content - so there is no injection
-    // surface despite shell:true.
-    const cmdLine = `"${codeCmd}" chat -r --add-file "${tmpFile}" "${prompt}"`;
+    // No prompt = the AI does not start; `--maximize` forces the chat view open
+    // for the empty query and the file lands as an attachment. Only the trusted
+    // resolved code path and our temp path are interpolated - no user content -
+    // so there is no injection surface despite shell:true.
+    const cmdLine = `"${codeCmd}" chat -r --add-file "${tmpFile}" --maximize`;
     try {
       child = spawn(cmdLine, { cwd, windowsHide: true, shell: true });
     } catch (e) {
