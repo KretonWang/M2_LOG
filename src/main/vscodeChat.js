@@ -84,10 +84,19 @@ function buildLogChatContext(name, text) {
   return header + String(text == null ? '' : text);
 }
 
-// Open a NEW VS Code chat session preloaded with the LOG as an attached file,
-// then WAIT for the user to type their own prompt. `code chat -n -m agent
-// --add-file <file>` (no prompt argument) opens a fresh agent-mode session with
-// the file attached and an empty input box. Every command-line token is
+// Constant kickoff prompt submitted to the new chat session. The VS Code `code
+// chat` CLI only actually OPENS a chat session when a prompt is supplied - with
+// no prompt it just opens an (empty) window and nothing happens. This string is
+// a fixed, whitelisted constant containing NO log or user content, so it adds no
+// shell-injection surface. It engages the agent immediately; the user can keep
+// the conversation going afterwards.
+const DEFAULT_CHAT_PROMPT =
+  '請分析這個附加的 LOG 檔案：找出錯誤、警告、異常的時間點與順序，並推斷可能的根因。';
+
+// Open a NEW VS Code chat session preloaded with the LOG as an attached file and
+// kick it off with a constant analysis prompt. `code chat -n -m agent
+// --add-file <file> "<prompt>"` opens a fresh agent-mode session with the file
+// attached and immediately starts the AI. Every command-line token is
 // constant/whitelisted or our crypto-random temp path, so there is no
 // shell-injection surface despite shell:true (needed to launch the code.cmd
 // batch shim on Windows). The LOG text only ever lives inside the temp file.
@@ -116,9 +125,10 @@ async function openInVSCodeChat(payload) {
     let child;
     try {
       // Constant command string: only the trusted resolved code path and our
-      // generated temp path are interpolated - no user content. No prompt
-      // argument, so the session waits for the user to type.
-      const cmdLine = `"${codeCmd}" chat -n -m agent --add-file "${tmpFile}"`;
+      // generated temp path are interpolated - no user content. The trailing
+      // prompt is a fixed constant, required for the chat session to actually
+      // open and start the AI.
+      const cmdLine = `"${codeCmd}" chat -n -m agent --add-file "${tmpFile}" "${DEFAULT_CHAT_PROMPT}"`;
       child = spawn(cmdLine, { cwd, windowsHide: true, shell: true });
     } catch (e) {
       resolve({ ok: false, error: 'Failed to launch VS Code: ' + e.message });
