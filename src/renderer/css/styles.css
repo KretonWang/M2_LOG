@@ -1269,6 +1269,11 @@ body.ana-ruler-dragging .ana-ruler-view {
 .ana-line {
   display: flex;
   align-items: flex-start;
+  /* Skip layout/paint work for off-screen lines so scrolling a large log stays
+     smooth. `auto` lets the browser remember each line's real height once seen,
+     keeping the scrollbar stable; ~20px matches the 12.5px/1.55 line-height. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 20px;
 }
 
 .ana-line:hover {
