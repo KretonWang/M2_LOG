@@ -47,10 +47,10 @@ function resolveCodeCommand() {
   return _codeCmd;
 }
 
-// Remove our own stale chat-context temp files. `code chat --add-file` reads the
-// file lazily - only when the user submits their first message - so we must NOT
-// delete it right after spawn. Instead we sweep files older than 6 hours on each
-// open, which is long enough for any realistic chat session.
+// Remove our own stale chat-context temp files/folders. `code chat --add-file`
+// reads the file lazily - only when the user submits their first message - so we
+// must NOT delete it right after spawn. Instead we sweep entries older than 6
+// hours on each open, which is long enough for any realistic chat session.
 function sweepStaleChatTemps() {
   const dir = os.tmpdir();
   const cutoff = Date.now() - 6 * 60 * 60 * 1000;
@@ -61,14 +61,27 @@ function sweepStaleChatTemps() {
     return;
   }
   for (const name of entries) {
-    if (!/^m2log-chat-[0-9a-f]+\.txt$/i.test(name)) continue;
+    // Legacy flat temp files and the current per-session subfolders.
+    if (!/^m2log-chat-[0-9a-f]+(\.txt)?$/i.test(name)) continue;
     const full = path.join(dir, name);
     try {
-      if (fs.statSync(full).mtimeMs < cutoff) fs.unlinkSync(full);
+      if (fs.statSync(full).mtimeMs < cutoff) fs.rmSync(full, { recursive: true, force: true });
     } catch {
       /* best-effort cleanup */
     }
   }
+}
+
+// Sanitize a LOG name into a safe on-disk file name. The temp file is named after
+// the real LOG so VS Code shows the actual name on the attachment chip (and seeds
+// the conversation title from it). Strips path separators / illegal characters
+// and any non-ASCII, guarantees a sensible extension.
+function sanitizeFileName(name) {
+  let s = String(name == null ? '' : name).trim();
+  s = s.replace(/[\\/:*?"<>|]+/g, '_').replace(/[^\x20-\x7E]+/g, '_').trim();
+  if (!s) s = 'log';
+  if (!/\.[A-Za-z0-9]{1,8}$/.test(s)) s += '.txt';
+  return s.slice(0, 120);
 }
 
 // Build the context document attached to the chat: a short header naming the
@@ -84,13 +97,17 @@ function buildLogChatContext(name, text) {
   return header + String(text == null ? '' : text);
 }
 
-// Open a NEW VS Code chat session preloaded with the LOG as an attached file,
-// then WAIT for the user to type their own prompt. `code chat -n -m agent
-// --add-file <file>` (no prompt argument) opens a fresh agent-mode session with
-// the file attached and an empty input box. Every command-line token is
-// constant/whitelisted or our crypto-random temp path, so there is no
-// shell-injection surface despite shell:true (needed to launch the code.cmd
-// batch shim on Windows). The LOG text only ever lives inside the temp file.
+// Open a VS Code chat session preloaded with the LOG as an attached file, with
+// the input box LEFT EMPTY so nothing is auto-submitted - the user types their
+// own prompt and presses Enter. We REUSE the running VS Code window (`-r`)
+// instead of forcing a new empty one (`-n`): a brand-new window is not ready in
+// time, so the chat request and `--add-file` attachment get dropped. We pass NO
+// prompt (so the AI does not start on its own) plus `--maximize`, which is what
+// actually forces the chat view open for an empty query - without it a
+// prompt-less `code chat` is a silent no-op. Every command-line token is either
+// trusted/whitelisted or our crypto-random temp path, so there is no
+// shell-injection surface despite shell:true (needed for the code.cmd shim on
+// Windows). The LOG text only ever lives in the temp file.
 async function openInVSCodeChat(payload) {
   const { name, text, dir } = payload || {};
   if (text == null || String(text) === '') {
@@ -102,9 +119,13 @@ async function openInVSCodeChat(payload) {
 
   sweepStaleChatTemps();
 
+  // Write the context into a per-session temp folder, with the file named after
+  // the real LOG so the attachment chip shows the actual name.
   const context = buildLogChatContext(name, text);
-  const tmpFile = path.join(os.tmpdir(), `m2log-chat-${crypto.randomBytes(8).toString('hex')}.txt`);
+  const sessionDir = path.join(os.tmpdir(), `m2log-chat-${crypto.randomBytes(8).toString('hex')}`);
+  const tmpFile = path.join(sessionDir, sanitizeFileName(name));
   try {
+    fs.mkdirSync(sessionDir, { recursive: true });
     fs.writeFileSync(tmpFile, context, 'utf8');
   } catch (e) {
     return { ok: false, error: 'Failed to prepare chat context: ' + e.message };
@@ -114,22 +135,46 @@ async function openInVSCodeChat(payload) {
 
   return await new Promise((resolve) => {
     let child;
+    let settled = false;
+    let stderr = '';
+    let stdout = '';
+    const done = (res) => {
+      if (settled) return;
+      settled = true;
+      resolve(res);
+    };
+
+    // No prompt = the AI does not start; `--maximize` forces the chat view open
+    // for the empty query and the file lands as an attachment. Only the trusted
+    // resolved code path and our temp path are interpolated - no user content -
+    // so there is no injection surface despite shell:true.
+    const cmdLine = `"${codeCmd}" chat -r --add-file "${tmpFile}" --maximize`;
     try {
-      // Constant command string: only the trusted resolved code path and our
-      // generated temp path are interpolated - no user content. No prompt
-      // argument, so the session waits for the user to type.
-      const cmdLine = `"${codeCmd}" chat -n -m agent --add-file "${tmpFile}"`;
       child = spawn(cmdLine, { cwd, windowsHide: true, shell: true });
     } catch (e) {
-      resolve({ ok: false, error: 'Failed to launch VS Code: ' + e.message });
+      done({ ok: false, error: 'Failed to launch VS Code: ' + e.message });
       return;
     }
-    child.on('error', (e) => {
-      resolve({ ok: false, error: 'Failed to launch VS Code: ' + e.message });
+    if (child.stdout) child.stdout.on('data', (d) => (stdout += d.toString()));
+    if (child.stderr) child.stderr.on('data', (d) => (stderr += d.toString()));
+    child.on('error', (e) => done({ ok: false, error: 'Failed to launch VS Code: ' + e.message }));
+    child.on('close', (code) => {
+      try {
+        fs.appendFileSync(
+          path.join(os.tmpdir(), 'm2log-chat-debug.log'),
+          `[${new Date().toISOString()}] exit=${code}\ncmd=${cmdLine}\n` +
+            `stdout=${stdout.trim()}\nstderr=${stderr.trim()}\n\n`
+        );
+      } catch {
+        /* best-effort */
+      }
+      if (code === 0 || code == null) done({ ok: true });
+      else done({ ok: false, error: (stderr || stdout || `code chat exited ${code}`).trim() });
     });
-    child.on('spawn', () => {
-      resolve({ ok: true });
-    });
+    // When no VS Code is running yet, `code chat -r` launches a fresh instance and
+    // the wrapper stays attached - it never "closes" quickly. Treat that as a
+    // successful launch after a short grace period so the UI is not held hostage.
+    setTimeout(() => done({ ok: true }), 5000);
   });
 }
 
