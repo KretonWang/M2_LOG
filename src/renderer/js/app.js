@@ -1681,6 +1681,10 @@ function anaHighlightLine(line, rules) {
   return { html: out, level: maxLevel, tint: tintLevel };
 }
 
+// Monotonic token that identifies the in-flight chunked render; bumping it
+// cancels any outstanding animation-frame work from a previous file/highlight.
+let anaRenderToken = 0;
+
 function anaRenderContent(text, rules) {
   const el = $('#anaViewContent');
   if (!el) return;
@@ -1690,33 +1694,64 @@ function anaRenderContent(text, rules) {
   rules = { compiled: baseCompiled.concat(anaMarkCompiled()) };
   const lines = text === ana.text ? anaGetLines() : String(text).split(/\r\n|\r|\n/);
   const markers = [];
-  let html = '';
-  for (let i = 0; i < lines.length; i += 1) {
-    const res = anaHighlightLine(lines[i], rules);
-    const lvl = res.tint ? ' lvl-' + res.tint : '';
-    if (res.level) markers.push({ i, level: res.level });
-    html += `<div class="ana-line${lvl}"><span class="ana-ln">${i + 1}</span><span class="ana-lc">${res.html}</span></div>`;
-  }
-  el.innerHTML = html;
+  // Render in chunks so opening a large log does not freeze the UI thread:
+  // the first chunk paints almost immediately, the rest stream in across
+  // animation frames. A token cancels a half-finished render if another file
+  // (or a re-highlight) starts before this one completes.
+  const token = (anaRenderToken += 1);
+  const total = lines.length;
+  const CHUNK = 2000;
+  el.innerHTML = '';
   const scroller = document.getElementById('anaScroll');
   if (scroller) scroller.scrollTop = 0;
-  // Re-apply bookmarks + current line (preserved across re-highlight of the same file)
-  anaBm.lines.forEach((i) => {
-    const row = el.children[i];
-    if (row) row.classList.add('bookmarked');
-  });
-  if (anaBm.current >= 0 && el.children[anaBm.current]) {
-    el.children[anaBm.current].classList.add('current');
+
+  function finalize() {
+    // Re-apply bookmarks + current line (preserved across re-highlight of the same file)
+    anaBm.lines.forEach((i) => {
+      const row = el.children[i];
+      if (row) row.classList.add('bookmarked');
+    });
+    if (anaBm.current >= 0 && el.children[anaBm.current]) {
+      el.children[anaBm.current].classList.add('current');
+    }
+    anaBuildRuler(markers, total);
+    anaBmUpdateCounter();
+    anaNav.markers = markers;
+    anaRenderLevels(markers);
+    anaNavRebuild();
+    // Rebuild search highlights over the freshly rendered DOM (e.g. after a
+    // highlight-type change) without moving the viewport.
+    if (anaFind.q) anaFindRun(anaFind.q, { keepPos: true, noScroll: true });
   }
-  anaBuildRuler(markers, lines.length);
-  anaBmUpdateCounter();
-  anaNav.markers = markers;
-  anaRenderLevels(markers);
-  anaNavRebuild();
-  // Rebuild search highlights over the freshly rendered DOM (e.g. after a
-  // highlight-type change) without moving the viewport.
-  if (anaFind.q) anaFindRun(anaFind.q, { keepPos: true, noScroll: true });
+
+  let i = 0;
+  function renderChunk() {
+    if (token !== anaRenderToken) return false; // superseded by a newer render
+    const end = Math.min(i + CHUNK, total);
+    let html = '';
+    for (; i < end; i += 1) {
+      const res = anaHighlightLine(lines[i], rules);
+      const lvl = res.tint ? ' lvl-' + res.tint : '';
+      if (res.level) markers.push({ i, level: res.level });
+      html += `<div class="ana-line${lvl}"><span class="ana-ln">${i + 1}</span><span class="ana-lc">${res.html}</span></div>`;
+    }
+    if (html) el.insertAdjacentHTML('beforeend', html);
+    return i < total;
+  }
+
+  function pump() {
+    if (renderChunk()) {
+      requestAnimationFrame(pump);
+    } else if (token === anaRenderToken) {
+      finalize();
+    }
+  }
+
+  // First chunk runs synchronously so small files behave exactly as before and
+  // large files show content without a blank flash; remainder streams in.
+  pump();
 }
+
 
 // Build the right-edge overview ruler: one colored tick per error/warn line.
 function anaBuildRuler(markers, total) {
